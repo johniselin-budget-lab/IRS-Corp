@@ -1,0 +1,87 @@
+# IRS-Corp
+
+Downloader for an organized mirror of the IRS SOI **Corporation Complete
+Report (Publication 16)** basic tables, plus a first aligned cross-year
+panel (Table 4):
+
+- 2014+ (xlsx per table):
+  https://www.irs.gov/statistics/soi-tax-stats-corporation-income-tax-returns-complete-report-publication-16
+- 1994–2013 (one zip per tax year):
+  https://www.irs.gov/statistics/soi-tax-stats-corporation-complete-report-1994-to-2013
+
+This repo holds the **code only** — data is downloaded on demand, either into
+the repo's own (gitignored) `data/` folder or to a separate location of your
+choosing. All source files are U.S. federal government works (public domain).
+Files are stored **as published** (xlsx / legacy xls / WK1+FMT companions /
+documentation PDFs); no transformation happens at download time.
+
+## Usage
+
+```bash
+Rscript download_irs_corp.R                        # -> ./data, years 1994-2022
+Rscript download_irs_corp.R 2014 2023              # custom year range
+Rscript download_irs_corp.R --dest /path/to/store  # separate destination
+
+Rscript align_table4.R --dest /path/to/store       # build aligned/table_4.csv
+```
+
+Budget Lab internal users: the canonical shared destination (already
+populated) is documented internally — pass it via `--dest`.
+
+The downloader is idempotent (existing files and already-extracted archive
+years are skipped), tolerates unpublished files (HTTP 404s skipped with a
+message), and rewrites a checksummed `manifest.csv` (path, source URL, year,
+bytes, md5, retrieval date) at the destination each run.
+
+`align_table4.R` additionally needs **python3 with xlrd**
+(`python3 -m pip install --user xlrd`) because the 1994–2002 vintages
+(except 1996) are BIFF4 Excel files that R's `readxl` cannot open;
+`read_biff4.py` bridges them.
+
+## Data layout (under the destination)
+
+```
+modern/table_{id}/  table_{id}_{year}.xlsx  2014+ basic tables, one folder per
+                                            table; {id} is the published table
+                                            number, zero-padded so listings
+                                            sort in publication order
+                                            (table_01, table_01_cv, table_02_1,
+                                            ... table_02_4a, ... table_04, ...
+                                            table_14)
+archive/{year}/     as-published contents of that year's zip (1994-2013):
+                    ~25 .xls tables per year under the OLD table numbering,
+                    documentation/section PDFs, and for the mid-1990s
+                    legacy .WK1/.FMT companion files
+docs/               table_crosswalk_2014.pdf   SOI's old->new table-number map
+    pub16/          p16--{rev}.pdf   full Pub 16 PDFs, named by revision year
+                                     as published (each covers a tax year
+                                     ~3 years earlier)
+aligned/            table_4.csv      harmonized Table 4 panel, 1994-2022
+                                     (written by align_table4.R)
+manifest.csv        path, source url, year, bytes, md5, retrieval date
+```
+
+## Coverage and source-naming quirks
+
+| Source | Years | SOI naming |
+|---|---|---|
+| Modern basic tables | 2014–2022 | `{yy}co{code}ccr.xlsx`; codes `01`, `01cv`, `21`, `21a`, ..., `04`, ..., `62` map to published table numbers (see `MODERN_TABLES` in the downloader). Table 14 starts 2015. Table 13 is Table 13.1 (non-S/REIT/RIC only) through 2016 under the same filename. |
+| Archive zips | 1994–2013 | `{yy}coalcr.zip` (1994–2009), `{yy}coalccr.zip` (2010–2013). Table filenames inside change scheme repeatedly — e.g. the same table is `94CO22AC.XLS`, `CRTAB22.XLS` (95), `CRTB22.XLS` (96), `TABL22.XLS` (97), `{yy}co22nr.xls` (98–03), `{yy}co22ccr.xls` (04–13). |
+| Pub 16 PDFs | rev. 2019+ | `irs-prior/p16--{rev}.pdf`, revision-year names (no 2024 revision exists). The 1994–2013 report PDFs ship inside the zips. |
+
+**Table numbering changed in 2014.** The pre-2014 Complete Report numbered
+its tables 1–27 (plus a separate 1120S table set); SOI's crosswalk
+(`docs/table_crosswalk_2014.pdf`) maps them to the modern numbers. Modern
+**Table 4 = old Table 22**, modern 5.1 = old 6, etc. Several old tables
+(4, 8, 9, 14–19, 21, 23–25, 27) have **no modern successor**, and the
+1994–2002 files are legacy BIFF4 Excel (see `read_biff4.py`).
+
+## Notes on the data
+
+- [notes/table4.md](notes/table4.md) — Table 4 / old Table 22 (the aligned
+  test-case table): file map by year, the "Total"-row semantics change at
+  the 2014 renumbering, column availability by era, flags/suppression,
+  fractional return counts in 2017/2020, comparability cautions.
+
+When SOI publishes a new year, extend the range:
+`Rscript download_irs_corp.R --dest <store> 1994 2023`.
