@@ -23,6 +23,7 @@ Rscript download_irs_corp.R 2014 2023              # custom year range
 Rscript download_irs_corp.R --dest /path/to/store  # separate destination
 
 Rscript align_table4.R --dest /path/to/store       # build aligned/table_4.csv
+Rscript align_tables.R --dest /path/to/store       # all other aligned panels
 ```
 
 Budget Lab internal users: the canonical shared destination (already
@@ -33,10 +34,11 @@ years are skipped), tolerates unpublished files (HTTP 404s skipped with a
 message), and rewrites a checksummed `manifest.csv` (path, source URL, year,
 bytes, md5, retrieval date) at the destination each run.
 
-`align_table4.R` additionally needs **python3 with xlrd**
+The aligners additionally need **python3 with xlrd**
 (`python3 -m pip install --user xlrd`) because the 1994–2002 vintages
 (except 1996) are BIFF4 Excel files that R's `readxl` cannot open;
-`read_biff4.py` bridges them.
+`read_biff4.py` bridges them. Shared parsing machinery lives in
+`alignment_helpers.R`.
 
 ## Data layout (under the destination)
 
@@ -58,6 +60,12 @@ docs/               table_crosswalk_2014.pdf   SOI's old->new table-number map
                                      ~3 years earlier)
 aligned/            table_4.csv      harmonized Table 4 panel, 1994-2022
                                      (written by align_table4.R)
+                    table_02_1.csv   deep panels 1994-2022: Table 2.1 (old 2),
+                    table_02_2.csv   2.2 (old 3), 3.1 (old 5) -- items x size
+                    table_03_1.csv   classes (written by align_tables.R)
+    modern/         {table_id}.csv   every basic table 2014-2022, generic
+                                     long format keyed on published labels
+                    _coverage.csv    label x years-present (drift detector)
 manifest.csv        path, source url, year, bytes, md5, retrieval date
 ```
 
@@ -82,6 +90,11 @@ its tables 1–27 (plus a separate 1120S table set); SOI's crosswalk
   test-case table): file map by year, the "Total"-row semantics change at
   the 2014 renumbering, column availability by era, flags/suppression,
   fractional return counts in 2017/2020, comparability cautions.
+- [notes/modern_tables.md](notes/modern_tables.md) — the rest of the tables:
+  modern-panel label stability (NAICS drift, the Table 13 definition break),
+  deep-panel mechanics (class-bound units, bracket changes, item aliases and
+  the seam verification), and the roadmap for old-table pairs not yet
+  deep-aligned.
 
 When SOI publishes a new year, extend the range:
 `Rscript download_irs_corp.R --dest <store> 1994 2023`.

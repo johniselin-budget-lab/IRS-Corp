@@ -47,8 +47,6 @@
 #   Rscript align_table4.R --dest /path/to/store
 #------------------------------------------------------------------------------
 
-suppressMessages(library(readxl))
-
 #-----------------
 # Parse arguments
 #-----------------
@@ -58,14 +56,14 @@ args = commandArgs(trailingOnly = TRUE)
 script_dir = dirname(sub('--file=', '', grep('--file=', commandArgs(), value = TRUE)[1]))
 if (is.na(script_dir) || script_dir == '') script_dir = '.'
 
+source(file.path(script_dir, 'alignment_helpers.R'))
+
 dest = file.path(script_dir, 'data')
 if (length(args) > 0 && args[1] == '--dest') {
   if (length(args) < 2) stop('--dest requires a path')
   dest = args[2]
 }
 YEARS = 1994:2022
-
-BIFF4_HELPER = file.path(normalizePath(script_dir), 'read_biff4.py')
 
 #---------------------------------------
 # Where Table 4 / old Table 22 lives
@@ -139,53 +137,9 @@ UNITS = c(
   tax_after_credits         = MONEY_UNIT
 )
 
-#-----------------------
-# Read a sheet as text
-#-----------------------
-
-read_sheet_matrix = function(path) {
-  m = tryCatch({
-    d = suppressWarnings(suppressMessages(
-      read_excel(path, col_names = FALSE, col_types = 'text',
-                 .name_repair = 'minimal')))
-    as.matrix(d)
-  }, error = function(e) NULL)
-  if (is.null(m)) {
-    # legacy BIFF4 file: go through python/xlrd
-    if (Sys.which('python3') == '') {
-      stop('python3 not found (needed for legacy .xls): ', path)
-    }
-    lines = suppressWarnings(
-      system2('python3', c(shQuote(BIFF4_HELPER), shQuote(path)),
-              stdout = TRUE, stderr = TRUE))
-    status = attr(lines, 'status')
-    if (!is.null(status) && status != 0) {
-      stop('read_biff4.py failed on ', path, ':\n',
-           paste(lines, collapse = '\n'))
-    }
-    d = utils::read.csv(text = paste(lines, collapse = '\n'), header = FALSE,
-                        colClasses = 'character')
-    m = as.matrix(d)
-  }
-  m[is.na(m)] = ''
-  trimws(m)
-}
-
 #---------------------
 # Locate table pieces
 #---------------------
-
-# The row of consecutive column numbers 1..N under the header block
-find_numrow = function(m) {
-  for (i in seq_len(min(25, nrow(m)))) {
-    v = suppressWarnings(as.numeric(m[i, ]))
-    idx = which(!is.na(v))
-    if (length(idx) >= 5 && isTRUE(all(v[idx] == seq_along(idx)))) {
-      return(list(row = i, cols = idx))
-    }
-  }
-  stop('column-number row not found')
-}
 
 check_headers = function(m, numrow, cols, vars, path) {
   for (k in seq_along(cols)) {
@@ -196,12 +150,6 @@ check_headers = function(m, numrow, cols, vars, path) {
                    path, k, vars[k], trimws(hdr)))
     }
   }
-}
-
-normalize_label = function(x) {
-  x = gsub('\\[[0-9]+\\]', '', x)   # footnote refs
-  x = gsub('[.*]+$', '', trimws(x)) # trailing dots / asterisks
-  trimws(gsub('\\s+', ' ', x))
 }
 
 classify_row = function(label, year) {
@@ -228,23 +176,6 @@ class_lower_bound = function(label) {
   as.numeric(gsub('[$,]', '', regmatches(label, regexpr('^\\$[0-9,]+', label))))
 }
 
-clean_value = function(x) {
-  raw = trimws(gsub('\\[[0-9]+\\]', '', x))
-  raw = gsub(',', '', raw)
-  if (raw == '')                 return(list(value = NA_real_, flag = 'blank'))
-  if (tolower(raw) == 'd')       return(list(value = NA_real_, flag = 'd'))
-  if (grepl('^-+$', raw))        return(list(value = 0,        flag = '-'))
-  flag = NA_character_
-  if (startsWith(raw, '*')) {
-    flag = '*'
-    raw  = trimws(sub('^\\*+', '', raw))
-    if (raw == '') return(list(value = NA_real_, flag = '*'))
-  }
-  val = suppressWarnings(as.numeric(raw))
-  if (is.na(val)) stop('unparseable value: "', x, '"')
-  list(value = val, flag = flag)
-}
-
 #--------------------
 # Parse one vintage
 #--------------------
@@ -254,9 +185,10 @@ parse_year = function(year) {
   if (!file.exists(path)) {
     stop('missing input (run download_irs_corp.R first): ', path)
   }
-  m    = read_sheet_matrix(path)
+  m    = read_sheet_matrix(path, script_dir)
   vars = vars_for_year(year)
   loc  = find_numrow(m)
+  if (is.null(loc)) stop(path, ': column-number row not found')
   if (length(loc$cols) != length(vars)) {
     stop(sprintf('%s: expected %d data columns, found %d',
                  path, length(vars), length(loc$cols)))
