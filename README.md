@@ -95,6 +95,10 @@ its tables 1–27 (plus a separate 1120S table set); SOI's crosswalk
   deep-panel mechanics (class-bound units, bracket changes, item aliases and
   the seam verification), and the roadmap for old-table pairs not yet
   deep-aligned.
+- [notes/alignment_plan.md](notes/alignment_plan.md) — the standing plan:
+  what is aligned, what remains (tiered by blocker), recommended order, and
+  a proposal to mirror/align the SOI partnership statistics as a sibling
+  repo.
 
 When SOI publishes a new year, extend the range:
 `Rscript download_irs_corp.R --dest <store> 1994 2023`.
