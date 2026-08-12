@@ -1,8 +1,9 @@
 # IRS-Corp
 
 Downloader for an organized mirror of the IRS SOI **Corporation Complete
-Report (Publication 16)** basic tables, plus a first aligned cross-year
-panel (Table 4):
+Report (Publication 16)** basic tables, plus aligned cross-year panels:
+1994–2022 for Tables 4, 2.1, 2.2, and 3.1, and 2014–2022 generic panels
+for every basic table (see `aligned/` in the layout below):
 
 - 2014+ (xlsx per table):
   https://www.irs.gov/statistics/soi-tax-stats-corporation-income-tax-returns-complete-report-publication-16
@@ -81,7 +82,7 @@ manifest.csv        path, source url, year, bytes, md5, retrieval date
 its tables 1–27 (plus a separate 1120S table set); SOI's crosswalk
 (`docs/table_crosswalk_2014.pdf`) maps them to the modern numbers. Modern
 **Table 4 = old Table 22**, modern 5.1 = old 6, etc. Several old tables
-(4, 8, 9, 14–19, 21, 23–25, 27) have **no modern successor**, and the
+(4, 8, 9, 11, 14–19, 21, 23–25, 27) have **no modern successor**, and the
 1994–2002 files are legacy BIFF4 Excel (see `read_biff4.py`).
 
 ## Notes on the data

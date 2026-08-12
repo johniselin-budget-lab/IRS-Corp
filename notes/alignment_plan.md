@@ -84,7 +84,7 @@ tables, sector columns — cheap at sector level alongside Tier 1.
   `archive/1994/94CO01MI.XLS` — "Agricultural services", metal-mining
   detail, etc.). Only a coarse division-level bridge is defensible;
   recommendation: cut the industry panels at 1998 and document it.
-- **Old-only tables** (old 4, 8, 9, 14–19, 21, 23–25, 27 — no modern
+- **Old-only tables** (old 4, 8, 9, 11, 14–19, 21, 23–25, 27 — no modern
   successor per the [crosswalk][xwalk]): could become closed 1994–2013
   panels if a use case appears. Skip until then.
 - **No pre-2014 counterpart exists** for 2.1A, 2.3, 2.4A, 3.3, 13, 14 —
