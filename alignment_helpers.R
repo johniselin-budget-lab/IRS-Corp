@@ -80,16 +80,25 @@ find_numrow = function(m, max_scan = 30) {
   NULL
 }
 
-# All column-number rows in a sheet. Some old wide tables stack a SECOND
-# panel below the first with the same stub and continued column numbers
-# (1996 Table 1: rows 1-308 hold columns 1-20, rows 309+ repeat the title
-# and stub with columns numbered 21-40). The first panel is located exactly
-# as find_numrow() does; a continuation row must pick up numbering at
-# prev_max + 1 and contain NOTHING but the number run (data rows never do).
-# Returns a list of list(row, cols, vals); empty list if no numrow at all.
+# All column-number rows in a sheet. Old vintages stack a second block below
+# the first in TWO different ways, told apart by how its column numbers run:
+#
+#   kind = 'cols'  numbering CONTINUES (prev_max + 1): the block holds further
+#                  COLUMNS of the same rows -- 1996 Table 1 puts columns 1-20
+#                  in rows 1-308 and repeats the title and stub below with
+#                  columns numbered 21-40.
+#   kind = 'rows'  numbering REPEATS the first block's: the sheet is paginated
+#                  and the block holds further ROWS of the same columns -- the
+#                  2001 Table 1 CV file prints columns 21-40 on four pages,
+#                  each with its own title block, stub header and number row,
+#                  carrying a different slice of industries.
+#
+# A continuation row must contain NOTHING but the number run (data rows never
+# do). Returns a list of list(row, cols, vals, kind); empty if no numrow.
 find_numrows = function(m) {
   first = find_numrow(m)
   if (is.null(first)) return(list())
+  first$kind = 'cols'
   panels = list(first)
   i = first$row + 1
   while (i <= nrow(m)) {
@@ -99,10 +108,15 @@ find_numrows = function(m) {
       run = v[idx]
       if (all(run < 0)) run = -run
       prev = panels[[length(panels)]]$vals
-      if (all(run == round(run)) && run[1] == max(prev) + 1 &&
-          max(run) < 1000 && all(diff(run) >= 1) &&
-          mean(diff(run) == 1) >= 0.9) {
-        panels[[length(panels) + 1]] = list(row = i, cols = idx, vals = run)
+      well_formed = all(run == round(run)) && max(run) < 1000 &&
+        all(diff(run) >= 1) && mean(diff(run) == 1) >= 0.9
+      kind = if (!well_formed) NA_character_
+             else if (identical(run, first$vals)) 'rows'
+             else if (run[1] == max(prev) + 1) 'cols'
+             else NA_character_
+      if (!is.na(kind)) {
+        panels[[length(panels) + 1]] =
+          list(row = i, cols = idx, vals = run, kind = kind)
       }
     }
     i = i + 1
@@ -144,9 +158,17 @@ normalize_label = function(x) {
 # One SOI cell -> list(value, flag). Money in thousands as published.
 #   'd'  suppressed (NA)     '-'  none reported (0)
 #   '*'  use-with-caution    'blank' empty cell
-# Parenthesized values are negatives.
-clean_value = function(x) {
+# Parenthesized values are negatives in the money tables. The PERCENT tables
+# (coefficients of variation) instead write their footnote references in
+# parentheses -- "(4)" where a CV is not defined, 161 such cells in the TY2010
+# Table 1 CV file -- and write the rare genuinely negative CV with a minus
+# sign, so those callers pass paren_negative = FALSE and get a footnote flag
+# instead of a spurious -4.
+clean_value = function(x, paren_negative = TRUE) {
   if (grepl('^\\[[0-9]+\\]$', trimws(x))) {   # footnote-only cell, e.g. "[2]"
+    return(list(value = NA_real_, flag = trimws(x)))
+  }
+  if (!paren_negative && grepl('^\\([0-9]+\\)$', trimws(x))) {
     return(list(value = NA_real_, flag = trimws(x)))
   }
   raw = trimws(gsub('\\[[0-9]+\\]', '', x))
@@ -320,22 +342,25 @@ FIRST_ITEM_REGEX = paste0('^(number of returns|total returns of active|',
 # Parse one published sheet into long rows keyed on (row_label, col_label).
 # Returns data.frame or NULL rows for note lines. Section-header stub rows
 # (label present, no data at all) become the `section` of following rows.
-# Sheets that stack a continuation panel below the first (1996 Table 1:
-# columns 21-40 under a repeated title and stub) yield one combined frame,
-# col_seq continuing across panels. Two hierarchy columns ride along:
+# Sheets stacking a continuation block below the first yield one combined
+# frame either way (see find_numrows): a 'cols' block extends col_seq (1996
+# Table 1's columns 21-40), a 'rows' block restarts it because the sheet is
+# paginated and the block carries further industries (the 2001 Table 1 CV
+# file's four pages). Two hierarchy columns ride along:
 #   row_indent  leading spaces of the stub cell as published -- the industry
 #               hierarchy in the Table 1 family (indent WIDTHS vary by file
 #               and even by block, so classification is the caller's job)
 #   col_group   ' > '-joined industry spanners covering the column, from
 #               merged header cells; '' before 2003 (no merge records)
-extract_sheet = function(path, helper_dir) {
+# paren_negative = FALSE for percent (CV) sheets -- see clean_value.
+extract_sheet = function(path, helper_dir, paren_negative = TRUE) {
   raw = read_sheet_matrix(path, helper_dir, trim = 'right')
   m   = trimws(raw)
   locs = find_numrows(m)
   if (length(locs) == 0) {
     fb = find_data_block(m, FIRST_ITEM_REGEX)
     # 'row' is already the line above the data
-    panels = list(list(row = fb$row, cols = fb$cols,
+    panels = list(list(row = fb$row, cols = fb$cols, kind = 'cols',
                        hdr_rows = seq_len(fb$row), data_end = nrow(m)))
   } else {
     panels = lapply(seq_along(locs), function(k) {
@@ -349,7 +374,8 @@ extract_sheet = function(path, helper_dir) {
         i + 1
       }
       # exclude the column-number row itself
-      list(row = loc$row, cols = loc$cols, hdr_rows = hdr_start:(loc$row - 1))
+      list(row = loc$row, cols = loc$cols, kind = loc$kind,
+           hdr_rows = hdr_start:(loc$row - 1))
     })
     for (k in seq_along(panels)) {
       panels[[k]]$data_end = if (k < length(panels)) {
@@ -357,14 +383,23 @@ extract_sheet = function(path, helper_dir) {
       } else nrow(m)
     }
   }
+  # col_seq offset per block: a paginated ('rows') block restarts the columns
+  offsets = integer(length(panels))
+  off = 0L
+  for (k in seq_along(panels)) {
+    if (panels[[k]]$kind == 'rows') off = 0L
+    offsets[k] = off
+    off = off + length(panels[[k]]$cols)
+  }
   merges = sheet_merges(path, helper_dir)
 
   # require the colon (or a bare "Notes") so items like "Notes and accounts
   # receivable" don't get swallowed as footnote lines
   note_regex = '^(notes?\\s*:|notes?$|source\\s*:|footnotes?\\b|\\*|d -|\\[)'
   out = list()
-  col_off = 0
-  for (p in panels) {
+  for (k in seq_along(panels)) {
+    p = panels[[k]]
+    col_off = offsets[k]
     headers = stack_headers(m, p$hdr_rows, p$cols)
     groups  = col_groups(m, p$hdr_rows, p$cols, merges)
     label_cols = seq_len(min(p$cols) - 1)
@@ -393,7 +428,7 @@ extract_sheet = function(path, helper_dir) {
       }
       stub = raw[i, label_cols[lab_idx]]
       indent = nchar(stub) - nchar(sub('^ +', '', stub))
-      cleaned = lapply(cells, clean_value)
+      cleaned = lapply(cells, clean_value, paren_negative = paren_negative)
       out[[length(out) + 1]] = data.frame(
         row_seq    = i,
         section    = section,
@@ -407,7 +442,6 @@ extract_sheet = function(path, helper_dir) {
         row.names = NULL, stringsAsFactors = FALSE
       )
     }
-    col_off = col_off + length(p$cols)
   }
   df = do.call(rbind, out)
   if (is.null(df) || length(unique(df$row_label)) < 5) {

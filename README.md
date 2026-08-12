@@ -2,9 +2,9 @@
 
 Downloader for an organized mirror of the IRS SOI **Corporation Complete
 Report (Publication 16)** basic tables, plus aligned cross-year panels:
-1994–2022 for Tables 4, 2.1, 2.2, and 3.1, 1998–2022 for Table 1 at NAICS
-sector level, and 2014–2022 generic panels for every basic table (see
-`aligned/` in the layout below):
+1994–2022 for Tables 4, 2.1, 2.2, and 3.1, 1998–2022 for Table 1 (and its
+coefficients of variation) at NAICS sector level, and 2014–2022 generic panels
+for every basic table (see `aligned/` in the layout below):
 
 - 2014+ (xlsx per table):
   https://www.irs.gov/statistics/soi-tax-stats-corporation-income-tax-returns-complete-report-publication-16
@@ -26,7 +26,7 @@ Rscript download_irs_corp.R --dest /path/to/store  # separate destination
 
 Rscript align_table4.R --dest /path/to/store       # build aligned/table_4.csv
 Rscript align_tables.R --dest /path/to/store       # modern + size-class panels
-Rscript align_industry.R --dest /path/to/store     # industry panels (Table 1)
+Rscript align_industry.R --dest /path/to/store     # industry panels (Table 1 + CV)
 ```
 
 Budget Lab internal users: the canonical shared destination (already
@@ -69,7 +69,8 @@ aligned/            table_4.csv      harmonized Table 4 panel, 1994-2022
                     table_02_2.csv   2.2 (old 3), 3.1 (old 5) -- items x size
                     table_03_1.csv   classes (written by align_tables.R)
                     table_01.csv     Table 1 at NAICS SECTOR level, 1998-2022
-                                     -- 19 sectors x items (written by
+                    table_01_cv.csv  -- 19 sectors x items, plus the matching
+                                     coefficients of variation (written by
                                      align_industry.R)
     modern/         {table_id}.csv   every basic table 2014-2022, generic
                                      long format keyed on published labels,

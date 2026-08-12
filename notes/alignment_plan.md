@@ -24,6 +24,7 @@ page][archive] · [SOI's 2014 table-number crosswalk][xwalk] (mirrored at
 | `aligned/table_03_1.csv` | 1994–2022 | Table 3.1 ← old Table 5, All-Industries block (by receipt size) |
 | `aligned/modern/{table_id}.csv`, all 26 tables | 2014–2022 | generic long panels + `_coverage.csv` label-drift report |
 | `aligned/table_01.csv` | 1998–2022 | Table 1 ← old Table 1, **sector level** ([industry_tables.md](industry_tables.md)) |
+| `aligned/table_01_cv.csv` | 1998–2022 | Table 1 CV ← old Table 1 CV, same shape |
 
 Everything alignable by pure text-label matching is done, and the first
 industry panel (Table 1 at sector level) is built. The remaining work is
@@ -41,7 +42,7 @@ mid-panel in Table 5.1).
 | Modern table | Old table (1994–2013 zips) | Orientation | Notes |
 |---|---|---|---|
 | [Table 1][pub16] (`{yy}co01ccr.xlsx`) | old 1 (`{yy}co01ccr.xls` 2004+, `{yy}co01nr.xls` 98–03) | industry rows × item cols | **DONE at sector level** → `aligned/table_01.csv` |
-| [Table 1 CV][pub16] (`{yy}co01cvccr.xlsx`) | old 1cv (`{yy}co01cv.xls`) | same | CVs, same spec + file map; **next increment** |
+| [Table 1 CV][pub16] (`{yy}co01cvccr.xlsx`) | old 1cv (`{yy}co01cv.xls`) | same | **DONE at sector level** → `aligned/table_01_cv.csv` |
 | [Tables 5.1–5.4][pub16] (`{yy}co51–54ccr.xlsx`) | old 6, 7, 12, 13 | items × industry cols | old files: item stubs ≈ Table 2 alias set |
 
 Two levels of ambition:
@@ -161,8 +162,11 @@ Notes from the survey:
    intended, it forced the engine extension and established the sector recipe
    every later step reuses. It also bought a new file: `align_industry.R`,
    where the industry machinery (sector list, aliases, SIC cutoff) lives.
-2. **Table 1 CV, 1998–2022** — the cheapest next step: same spec, different
-   file map, `unit = cv_pct`.
+2. ~~**Table 1 CV, 1998–2022**~~ — **done 2026-08**
+   (`aligned/table_01_cv.csv`). Same spec, different file map, `unit = cv_pct`;
+   it also bought two engine fixes every later table inherits — paginated
+   sheets (`find_numrows` kind `'rows'`) and parenthesised footnote references
+   in percent tables (`clean_value(paren_negative = FALSE)`).
 3. **Table 5.1 sector-level** (all-corporation balance sheet by industry) —
    reuses the 2.x item aliases; sectors are matched on the COLUMN dimension
    there, using `col_group` where the vintage records merged cells.

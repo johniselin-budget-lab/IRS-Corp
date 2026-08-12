@@ -93,15 +93,22 @@ Mechanics and gotchas:
 columns in every panel (modern CSVs gained them in the same rerun; values
 unchanged, verified cell-by-cell against the pre-change outputs):
 
-- **Stacked lower panels.** 1996 Table 1 repeats title + stub below the
-  first block with columns numbered 21–40; `find_numrows()` finds
-  continuation column-number rows (numbering must resume at prev+1 and the
-  row must contain nothing else) and the panels are parsed separately and
-  combined, `col_seq` continuing across them. 2004+ splits such panels into
-  separate files instead (`04co01accr.xls`/`04co01bccr.xls`) — that is a
-  file-map concern for the spec, not the parser. Horizontally repeated
-  stub panels (1996 Table 2) already worked: the column-number run simply
-  skips the repeated stub column.
+- **Stacked lower blocks, of two kinds.** `find_numrows()` finds continuation
+  column-number rows (each must contain nothing but its number run) and tells
+  the two layouts apart by how the numbering runs:
+  - **more columns** (`kind = 'cols'`, numbering resumes at prev+1) — 1996
+    Table 1 puts columns 1–20 in rows 1–308 and repeats title + stub below
+    with columns 21–40. `col_seq` continues across the blocks.
+  - **more rows** (`kind = 'rows'`, numbering repeats) — the 2001 Table 1 CV
+    file is *paginated*: columns 21–40 printed on four pages, each with its
+    own title block, stub header and number row, carrying a different slice of
+    industries. `col_seq` restarts and the rows are appended.
+
+  2004+ splits column panels into separate files instead
+  (`04co01accr.xls`/`04co01bccr.xls`) — a file-map concern for the spec, not
+  the parser. Horizontally repeated stub panels (1996 Table 2, and the
+  two/three-panel Table 1 vintages) already worked: the column-number run
+  simply skips the repeated stub columns.
 - **`row_indent`** — leading spaces of the stub cell as published, the row
   hierarchy of the Table 1 family in ALL eras (readxl's default `trim_ws`
   was destroying it in the xlsx era; `read_sheet_matrix` now preserves it).

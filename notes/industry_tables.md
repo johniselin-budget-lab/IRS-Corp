@@ -119,13 +119,76 @@ worth); the tolerance is 1e-04. Seams checked and smooth at 2003/04 (file
 scheme), 2006/07 (item set) and 2013/14 (renumbering); the all-industries
 return count rises 4.85M (1998) → 6.85M (2022).
 
+## `aligned/table_01_cv.csv` — the same table's coefficients of variation
+
+Same shape, same 9,410 cells, `unit = cv_pct`, built by the same code over a
+different file map — so a CV joins onto its estimate on `(tax_year, industry,
+item)`. Sampling variability for every cell of the sector panel.
+
+### File map
+
+| Years | File |
+|---|---|
+| 1998 | **no separate CV file** — CVs are columns 21–40 of `98co01nr.xls` |
+| 1999–2003 | `{yy}co01cv.xls` (1999 uppercase `.XLS`) |
+| 2004–2005 | `{yy}co01bccr.xls` — the `b` half of the split |
+| 2006–2013 | `{yy}co01cv.xls` |
+| 2014–2022 | `modern/table_01_cv/table_01_cv_{year}.xlsx` |
+
+Column counts and item order mirror the estimates exactly in every era, so
+`t1_items()` is reused unchanged. The block selection splits a sheet holding
+both measures at the first column whose header carries the CV spanner, which
+also makes a standalone CV file (spanner on column 1) work through the same
+rule. **The TY2000 rotation does NOT apply to the CV file** — its
+wholesale/retail block keeps the large prior-year-minimum-credit CV in the
+first of the last six columns, exactly as 1999 and 2001 do — so the repair is
+scoped to the estimates.
+
+### Two published-file quirks the CV panel exposed
+
+- **The 2001 CV file is paginated.** It prints columns 21–40 across four
+  pages, each with its own title block, stub header and number row, carrying a
+  different slice of industries. That is a *row* continuation, distinct from
+  1996 Table 1's *column* continuation, and `find_numrows()` now tells them
+  apart by whether the block's numbers repeat the first block's or continue
+  past them (`kind = 'rows'` vs `'cols'`). Before the fix the file failed
+  loudly on a header cell reaching the value parser — not silently truncated.
+- **Footnote references in parentheses.** The percent tables write "(4)" where
+  a CV is undefined — 161 such cells in TY2010 — which the money-table
+  convention would read as −4. `clean_value(paren_negative = FALSE)` treats
+  them as footnote flags for percent sheets; the money tables keep parentheses
+  as negatives. Six cells in the TY2000 CV file are worse: the footnote reached
+  the sheet as the *number* −4, indistinguishable by text. Those are caught by
+  the sign rule below.
+
+### What verifies the panel
+
+- **Parallelism**: every `(tax_year, industry, item)` in the CV panel pairs 1:1
+  with the estimates panel — 9,410 cells, no orphans either way.
+- **Sign rule**: a CV may be negative only where its own estimate is negative
+  (SOI carries the sign of the mean). Three cells qualify, all the negative net
+  worth of the not-allocable residual in 2000/2001/2005. Any other negative CV
+  is a footnote artifact and becomes NA with a `(4)` flag; the run fails if
+  more than a handful appear. Two such cells exist (TY2000 manufacturing).
+- **Cross-validation at 2013**, which publishes CVs twice: the standalone file
+  against the inline block in the estimates sheet gives **4,096 of 4,097**
+  numeric cells identical with NA patterns agreeing everywhere. The lone
+  mismatch is SOI's own — "Support activities for mining", foreign-tax-credit
+  CV, reads 8.0 in `13co01cv.xls` and 0.68 in `13co01ccr.xls`, both stored as
+  numbers with every neighbouring cell agreeing. It is a minor industry, so it
+  falls outside the sector panel; the aligner reads the standalone file, whose
+  headers are clean (the inline block's stacked headers pick up wrap
+  contamination — "Business net income receipts", "Net income goods sold").
+- **1998**, the one year with no standalone CV file, is checked by continuity:
+  its inline CVs track 1999 closely (all-industries number-of-returns CV 0.18
+  vs 0.19, manufacturing 2.12 vs 2.13).
+
+Observed CV range across the panel: −230.90 to 691.25. Large values are real —
+SOI prints them for thin cells, e.g. net worth of the not-allocable rows — so
+the range assertion is deliberately loose and about structure, not statistics.
+
 ## Next increments
 
-- **Table 1 CV** (`{yy}co01cv.xls` / `modern/table_01_cv/`, plus the inline
-  blocks in 1998/2013 and the `b` files in 2004–05): same spec with a
-  different file map and `unit = cv_pct`. Note the 2013-era CV headers pick up
-  wrap contamination ("Business net income receipts", "Net income goods sold")
-  that needs an alias or a header fix.
 - **Tables 5.1–5.4** (← old 6, 7, 12, 13): items × industry **columns**, so
   the sector list is matched against `col_label`/`col_group` instead of the
   stub. `col_group` gives the spanner path where the file records merges
