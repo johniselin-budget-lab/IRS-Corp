@@ -64,112 +64,9 @@ MODERN_YEARS = 2014:2022
 ROW_IS_INDUSTRY = c('table_01', 'table_01_cv')
 PCT_TABLES      = c('table_02_1a', 'table_02_4a')
 
-# Stub anchor for vintages with no column-number row
-FIRST_ITEM_REGEX = paste0('^(number of returns|total returns of active|',
-                          'all industries|all sectors)')
-
 #--------------------------
-# Generic sheet extraction
+# Per-cell units
 #--------------------------
-
-# Parse one published sheet into long rows keyed on (row_label, col_label).
-# Returns data.frame or NULL rows for note lines. Section-header stub rows
-# (label present, no data at all) become the `section` of following rows.
-# Sheets that stack a continuation panel below the first (1996 Table 1:
-# columns 21-40 under a repeated title and stub) yield one combined frame,
-# col_seq continuing across panels. Two hierarchy columns ride along:
-#   row_indent  leading spaces of the stub cell as published -- the industry
-#               hierarchy in the Table 1 family (indent WIDTHS vary by file
-#               and even by block, so classification is the caller's job)
-#   col_group   ' > '-joined industry spanners covering the column, from
-#               merged header cells; '' before 2003 (no merge records)
-extract_sheet = function(path) {
-  raw = read_sheet_matrix(path, script_dir, trim = 'right')
-  m   = trimws(raw)
-  locs = find_numrows(m)
-  if (length(locs) == 0) {
-    fb = find_data_block(m, FIRST_ITEM_REGEX)
-    # 'row' is already the line above the data
-    panels = list(list(row = fb$row, cols = fb$cols,
-                       hdr_rows = seq_len(fb$row), data_end = nrow(m)))
-  } else {
-    panels = lapply(seq_along(locs), function(k) {
-      loc = locs[[k]]
-      hdr_start = if (k == 1) 1 else {
-        # a lower panel's header block: scan up from its column-number row
-        # to just past the previous panel's last data-carrying row
-        i = loc$row - 1
-        while (i > locs[[k - 1]]$row &&
-               sum(looks_data_cell(m[i, loc$cols])) < 2) i = i - 1
-        i + 1
-      }
-      # exclude the column-number row itself
-      list(row = loc$row, cols = loc$cols, hdr_rows = hdr_start:(loc$row - 1))
-    })
-    for (k in seq_along(panels)) {
-      panels[[k]]$data_end = if (k < length(panels)) {
-        panels[[k + 1]]$hdr_rows[1] - 1
-      } else nrow(m)
-    }
-  }
-  merges = sheet_merges(path, script_dir)
-
-  # require the colon (or a bare "Notes") so items like "Notes and accounts
-  # receivable" don't get swallowed as footnote lines
-  note_regex = '^(notes?\\s*:|notes?$|source\\s*:|footnotes?\\b|\\*|d -|\\[)'
-  out = list()
-  col_off = 0
-  for (p in panels) {
-    headers = stack_headers(m, p$hdr_rows, p$cols)
-    groups  = col_groups(m, p$hdr_rows, p$cols, merges)
-    label_cols = seq_len(min(p$cols) - 1)
-    min_cells  = max(2, ceiling(0.1 * length(p$cols)))
-    section = NA_character_
-    for (i in (p$row + 1):p$data_end) {
-      lab_cells = m[i, label_cols]
-      # take the label cell CLOSEST to the data: 2004-06 vintages carry a
-      # stray print page number in the first column
-      lab_idx = rev(which(lab_cells != ''))[1]
-      label_raw = if (is.na(lab_idx)) '' else lab_cells[lab_idx]
-      if (grepl('^[0-9.]+$', label_raw)) label_raw = ''   # page-number cell
-      label = normalize_label(label_raw)
-      cells = m[i, p$cols]
-      n_filled = sum(cells != '')
-      # footnote guard runs on the RAW label: normalize_label strips leading
-      # "[1]" markers, which would let note lines masquerade as row labels
-      if (grepl(note_regex, tolower(trimws(label_raw)))) next
-      if (label == '' && n_filled == 0) next
-      if (label != '' && n_filled == 0) {          # section header stub
-        section = sub(':$', '', label)
-        next
-      }
-      if (label == '' || n_filled < min_cells) {
-        next                                        # stray / spill-over line
-      }
-      stub = raw[i, label_cols[lab_idx]]
-      indent = nchar(stub) - nchar(sub('^ +', '', stub))
-      cleaned = lapply(cells, clean_value)
-      out[[length(out) + 1]] = data.frame(
-        row_seq    = i,
-        section    = section,
-        row_label  = label,
-        row_indent = indent,
-        col_seq    = col_off + seq_along(p$cols),
-        col_label  = normalize_label(headers),
-        col_group  = groups,
-        value      = unname(vapply(cleaned, function(v) v$value, numeric(1))),
-        flag       = unname(vapply(cleaned, function(v) v$flag,  character(1))),
-        row.names = NULL, stringsAsFactors = FALSE
-      )
-    }
-    col_off = col_off + length(p$cols)
-  }
-  df = do.call(rbind, out)
-  if (is.null(df) || length(unique(df$row_label)) < 5) {
-    stop(path, ': parsed only ', length(unique(df$row_label)), ' data rows')
-  }
-  df
-}
 
 cell_unit = function(table_id, row_label, col_label) {
   if (table_id == 'table_01_cv')     return('cv_pct')
@@ -196,7 +93,7 @@ for (id in modern_ids) {
   for (year in MODERN_YEARS) {
     path = file.path(dest, 'modern', id, sprintf('%s_%d.xlsx', id, year))
     if (!file.exists(path)) next   # e.g. table_14 before 2015
-    df = extract_sheet(path)
+    df = extract_sheet(path, script_dir)
     df = cbind(tax_year = year, df)
     df$unit = cell_unit(id, df$row_label, df$col_label)
     panels[[as.character(year)]] = df
@@ -336,7 +233,7 @@ apply_alias = function(label) {
 }
 
 deep_extract = function(path, spec, year) {
-  df = extract_sheet(path)
+  df = extract_sheet(path, script_dir)
   trunc = if (is.null(spec$truncate)) NULL else spec$truncate(year)
   if (!is.null(trunc)) {
     # keep only the leading (All-Industries) item block of sectioned tables

@@ -23,9 +23,11 @@ page][archive] · [SOI's 2014 table-number crosswalk][xwalk] (mirrored at
 | `aligned/table_02_2.csv` | 1994–2022 | Table 2.2 ← old Table 3 (net-income returns by asset size) |
 | `aligned/table_03_1.csv` | 1994–2022 | Table 3.1 ← old Table 5, All-Industries block (by receipt size) |
 | `aligned/modern/{table_id}.csv`, all 26 tables | 2014–2022 | generic long panels + `_coverage.csv` label-drift report |
+| `aligned/table_01.csv` | 1998–2022 | Table 1 ← old Table 1, **sector level** ([industry_tables.md](industry_tables.md)) |
 
-Everything alignable by pure text-label matching is done. The remaining
-work is tiered by what blocks it.
+Everything alignable by pure text-label matching is done, and the first
+industry panel (Table 1 at sector level) is built. The remaining work is
+tiered by what blocks it.
 
 ## Tier 1 — industry tables, NAICS era (1998 → present). The big prize.
 
@@ -38,15 +40,20 @@ mid-panel in Table 5.1).
 
 | Modern table | Old table (1994–2013 zips) | Orientation | Notes |
 |---|---|---|---|
-| [Table 1][pub16] (`{yy}co01ccr.xlsx`) | old 1 (`{yy}co01ccr.xls` 2004+, `{yy}co01nr.xls` 98–03) | industry rows × item cols | verified: same orientation old vs modern |
-| [Table 1 CV][pub16] (`{yy}co01cvccr.xlsx`) | old 1cv (`{yy}co01cv.xls`) | same | CVs, same treatment |
+| [Table 1][pub16] (`{yy}co01ccr.xlsx`) | old 1 (`{yy}co01ccr.xls` 2004+, `{yy}co01nr.xls` 98–03) | industry rows × item cols | **DONE at sector level** → `aligned/table_01.csv` |
+| [Table 1 CV][pub16] (`{yy}co01cvccr.xlsx`) | old 1cv (`{yy}co01cv.xls`) | same | CVs, same spec + file map; **next increment** |
 | [Tables 5.1–5.4][pub16] (`{yy}co51–54ccr.xlsx`) | old 6, 7, 12, 13 | items × industry cols | old files: item stubs ≈ Table 2 alias set |
 
 Two levels of ambition:
 
-1. **Sector level (~21 NAICS sectors)** — labels stable since 1998; mostly
-   mechanical with the existing engine. Deliverable: industry × item panels
-   1998–2022. *Do this first.*
+1. **Sector level (19 NAICS sectors)** — labels stable since 1998; mechanical
+   with the existing engine. Deliverable: industry × item panels 1998–2022.
+   *Done for Table 1* — the recipe, the pitfalls, and the verification are
+   written up in [industry_tables.md](industry_tables.md). Headlines for the
+   tables that follow: match sector **names**, never stub indentation (SOI
+   drops indentation entirely from 2017); exclude the 1998–99 supersectors and
+   "Wholesale and retail trade" or the detail double counts; and use the
+   sector-sum-vs-total check as the guard on every such choice.
 2. **Minor-industry level** — needs a curated per-revision concordance
    (renames bridgeable; splits only by aggregating). Only worth it if a
    downstream use needs sub-sector detail.
@@ -149,19 +156,26 @@ Notes from the survey:
 
 ## Recommended order
 
-1. **Table 1 at sector level, 1998–2022** — income, receipts, and tax items
-   by industry; best value-to-effort, and it forces the multi-panel header
-   extension every later step reuses.
-2. **Table 5.1 sector-level** (all-corporation balance sheet by industry) —
-   reuses the 2.x item aliases.
-3. **1120S set** (2004/2006–2022) and Tables 10/11/12 at sector level.
-4. **Minor-industry concordance** only when a downstream consumer actually
+1. ~~**Table 1 at sector level, 1998–2022**~~ — **done 2026-08**
+   (`aligned/table_01.csv`, [industry_tables.md](industry_tables.md)). As
+   intended, it forced the engine extension and established the sector recipe
+   every later step reuses. It also bought a new file: `align_industry.R`,
+   where the industry machinery (sector list, aliases, SIC cutoff) lives.
+2. **Table 1 CV, 1998–2022** — the cheapest next step: same spec, different
+   file map, `unit = cv_pct`.
+3. **Table 5.1 sector-level** (all-corporation balance sheet by industry) —
+   reuses the 2.x item aliases; sectors are matched on the COLUMN dimension
+   there, using `col_group` where the vintage records merged cells.
+4. **1120S set** (2004/2006–2022) and Tables 10/11/12 at sector level.
+5. **Minor-industry concordance** only when a downstream consumer actually
    needs sub-sector detail.
-5. **Partnership repo** (proposal above) can start any time — the
+6. **Partnership repo** (proposal above) can start any time — the
    downloader + entity-type and asset-size panels don't depend on the
    corporate tiers; its industry tables should wait for whatever NAICS
-   concordance step 1/4 produce.
+   concordance step 1/5 produce.
 
-Each step follows the established recipe: add a spec (per-era file map +
-span phrases) to `align_tables.R`, run, curate labels from the coverage
-report, verify values at the era seams before adopting any merge.
+Each step follows the established recipe: add a spec (per-era file map + the
+label/positional mapping) to `align_tables.R` for size-class panels or
+`align_industry.R` for industry panels, run, curate labels from the coverage
+report, and verify at the era seams — plus a detail-adds-to-total check —
+before adopting any merge.
