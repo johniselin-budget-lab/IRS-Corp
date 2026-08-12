@@ -87,6 +87,40 @@ Mechanics and gotchas:
   and 3.1 totals agree exactly (same population), Table 2.2 is the
   with-net-income subset.
 
+## Industry-dimension machinery (the Tier 1 engine prerequisite, done 2026-08)
+
+`extract_sheet` handles the industry-table shapes and emits two hierarchy
+columns in every panel (modern CSVs gained them in the same rerun; values
+unchanged, verified cell-by-cell against the pre-change outputs):
+
+- **Stacked lower panels.** 1996 Table 1 repeats title + stub below the
+  first block with columns numbered 21–40; `find_numrows()` finds
+  continuation column-number rows (numbering must resume at prev+1 and the
+  row must contain nothing else) and the panels are parsed separately and
+  combined, `col_seq` continuing across them. 2004+ splits such panels into
+  separate files instead (`04co01accr.xls`/`04co01bccr.xls`) — that is a
+  file-map concern for the spec, not the parser. Horizontally repeated
+  stub panels (1996 Table 2) already worked: the column-number run simply
+  skips the repeated stub column.
+- **`row_indent`** — leading spaces of the stub cell as published, the row
+  hierarchy of the Table 1 family in ALL eras (readxl's default `trim_ws`
+  was destroying it in the xlsx era; `read_sheet_matrix` now preserves it).
+  Indent WIDTHS are not comparable across files or even blocks (2013 Table
+  1 indents Agriculture minors 4 spaces, Mining minors 6), so specs should
+  classify on indent == 0 vs > 0 (plus the 1998–2000 supersector rows),
+  not on absolute width.
+- **`col_group`** — ' > '-joined industry spanners covering the column,
+  from real merged-cell ranges (`sheet_merges()`: sheet XML for xlsx,
+  xlrd via `read_xls_merges.py` for .xls). Positional inference is NOT
+  used — it cannot work, single-column sectors (Mining, Utilities) sit
+  between multi-column spanners. Availability follows what the file
+  format recorded: all 17 multi-column sectors in the modern 5.x, most
+  2013-era .xls, only some 2004-era .xls, and NOTHING before ~2003 (no
+  merge records) — there `col_group` is ''. Sector-TOTAL columns don't
+  need it in any era: the spanner text physically sits in the sector's
+  first column, so their stacked `col_label` reads "Mining Total",
+  "Construction Total", etc.
+
 ## Old-table counterparts NOT deep-aligned (roadmap)
 
 From SOI's crosswalk (docs/table_crosswalk_2014.pdf), with why:

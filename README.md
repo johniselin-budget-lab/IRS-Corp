@@ -37,9 +37,11 @@ bytes, md5, retrieval date) at the destination each run.
 
 The aligners additionally need **python3 with xlrd**
 (`python3 -m pip install --user xlrd`) because the 1994–2002 vintages
-(except 1996) are BIFF4 Excel files that R's `readxl` cannot open;
-`read_biff4.py` bridges them. Shared parsing machinery lives in
-`alignment_helpers.R`.
+(except 1996) are BIFF4 Excel files that R's `readxl` cannot open
+(`read_biff4.py` bridges them), and because the industry-spanner
+hierarchy in the column-industry tables is recovered from merged-cell
+ranges (`read_xls_merges.py`, for the 2003+ .xls vintages). Shared
+parsing machinery lives in `alignment_helpers.R`.
 
 ## Data layout (under the destination)
 
@@ -65,7 +67,9 @@ aligned/            table_4.csv      harmonized Table 4 panel, 1994-2022
                     table_02_2.csv   2.2 (old 3), 3.1 (old 5) -- items x size
                     table_03_1.csv   classes (written by align_tables.R)
     modern/         {table_id}.csv   every basic table 2014-2022, generic
-                                     long format keyed on published labels
+                                     long format keyed on published labels,
+                                     with industry-hierarchy columns
+                                     (row_indent, col_group)
                     _coverage.csv    label x years-present (drift detector)
 manifest.csv        path, source url, year, bytes, md5, retrieval date
 ```

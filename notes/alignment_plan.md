@@ -51,10 +51,16 @@ Two levels of ambition:
    (renames bridgeable; splits only by aggregating). Only worth it if a
    downstream use needs sub-sector detail.
 
-Engine prerequisite (shared by everything below): extend `extract_sheet` to
-handle the old wide files' **horizontally repeated title/stub panels** (as
-in 1996 Table 2) and **3–4-row wrapped hierarchical industry headers**, and
-to emit a sector/major/minor hierarchy column.
+Engine prerequisite (shared by everything below) — **done 2026-08**:
+`extract_sheet` handles stacked/repeated panels (1996 Table 1's rows-below
+continuation and 1996 Table 2's side-by-side panels) and emits the industry
+hierarchy: `row_indent` (stub leading spaces, all eras) and `col_group`
+(merged-cell spanners; empty pre-2003 where files carry no merge records).
+Mechanics and per-era caveats in
+[modern_tables.md](modern_tables.md#industry-dimension-machinery-the-tier-1-engine-prerequisite-done-2026-08).
+Remaining spec-level wrinkle for Table 1: 2004+ splits its two column
+panels into `{yy}co01accr.xls` / `{yy}co01bccr.xls` — the file map must
+carry both parts.
 
 ## Tier 2 — shallower history, engine-ready
 
