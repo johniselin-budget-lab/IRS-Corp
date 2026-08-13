@@ -2,9 +2,9 @@
 
 Downloader for an organized mirror of the IRS SOI **Corporation Complete
 Report (Publication 16)** basic tables, plus aligned cross-year panels:
-1994–2022 for Tables 4, 2.1, 2.2, and 3.1, 1998–2022 for Table 1 (and its
-coefficients of variation) at NAICS sector level, and 2014–2022 generic panels
-for every basic table (see `aligned/` in the layout below):
+1994–2022 for Tables 4, 2.1, 2.2, and 3.1, 1998–2022 for Tables 1 (with its
+coefficients of variation) and 5.1 at NAICS sector level, and 2014–2022 generic
+panels for every basic table (see `aligned/` in the layout below):
 
 - 2014+ (xlsx per table):
   https://www.irs.gov/statistics/soi-tax-stats-corporation-income-tax-returns-complete-report-publication-16
@@ -26,7 +26,7 @@ Rscript download_irs_corp.R --dest /path/to/store  # separate destination
 
 Rscript align_table4.R --dest /path/to/store       # build aligned/table_4.csv
 Rscript align_tables.R --dest /path/to/store       # modern + size-class panels
-Rscript align_industry.R --dest /path/to/store     # industry panels (Table 1 + CV)
+Rscript align_industry.R --dest /path/to/store     # industry panels (Tables 1, 1 CV, 5.1)
 ```
 
 Budget Lab internal users: the canonical shared destination (already
@@ -68,10 +68,13 @@ aligned/            table_4.csv      harmonized Table 4 panel, 1994-2022
                     table_02_1.csv   deep panels 1994-2022: Table 2.1 (old 2),
                     table_02_2.csv   2.2 (old 3), 3.1 (old 5) -- items x size
                     table_03_1.csv   classes (written by align_tables.R)
-                    table_01.csv     Table 1 at NAICS SECTOR level, 1998-2022
-                    table_01_cv.csv  -- 19 sectors x items, plus the matching
-                                     coefficients of variation (written by
-                                     align_industry.R)
+                    table_01.csv     industry panels at NAICS SECTOR level,
+                    table_01_cv.csv  1998-2022 -- 19 sectors x items, the
+                    table_05_1.csv   matching coefficients of variation, and
+                                     the full balance-sheet/income-statement
+                                     stub by sector (align_industry.R); all
+                                     three share one schema and join on
+                                     (tax_year, industry)
     modern/         {table_id}.csv   every basic table 2014-2022, generic
                                      long format keyed on published labels,
                                      with industry-hierarchy columns
@@ -107,9 +110,11 @@ its tables 1–27 (plus a separate 1120S table set); SOI's crosswalk
   the seam verification), and the roadmap for old-table pairs not yet
   deep-aligned.
 - [notes/industry_tables.md](notes/industry_tables.md) — the industry-dimension
-  panels: why Table 1 is aligned at sector level and starts in 1998, why rows
-  are matched by name rather than stub indentation, the per-era item sets, the
-  file-naming traps, and the TY2000 published column shift the aligner repairs.
+  panels: why they are aligned at sector level and start in 1998, why rows are
+  matched by name rather than stub indentation, how the sector's own column is
+  found once the header geometry moves, the per-era item sets, the file-naming
+  traps, and the two published defects the aligner repairs (TY2000's shifted
+  column block, TY2007's stripped minus signs).
 - [notes/alignment_plan.md](notes/alignment_plan.md) — the standing plan:
   what is aligned, what remains (tiered by blocker), recommended order, and
   a proposal to mirror/align the SOI partnership statistics as a sibling

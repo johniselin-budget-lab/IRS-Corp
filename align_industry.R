@@ -9,16 +9,24 @@
 # because the machinery below -- the canonical sector list, the per-era sector
 # label aliases, the SIC cutoff -- is shared by the industry tables and unused
 # by the size-class panels there. Parsing itself is shared: both scripts use
-# extract_sheet() from alignment_helpers.R.
+# extract_sheet() and ITEM_ALIASES from alignment_helpers.R.
 #
 # Builds:
 #   aligned/table_01.csv      Table 1 at SECTOR level, 1998-2022
 #   aligned/table_01_cv.csv   its coefficients of variation, same shape
+#   aligned/table_05_1.csv    Table 5.1 at SECTOR level, 1998-2022
 #     tax_year, row_type (all_industries | sector | not_allocable),
 #     industry, item, value, flag, unit
-#   The two panels are parallel by construction -- same industries, same items,
-#   same years, built by the same code over a different file map -- so a CV can
-#   be joined onto its estimate on (tax_year, industry, item).
+#   All three panels share that schema and the same canonical industry names,
+#   so they join on (tax_year, industry) -- and the two Table 1 panels, built
+#   by the same code over a different file map, join cell for cell on
+#   (tax_year, industry, item) so a CV sits beside its estimate.
+#
+# Table 1 carries the industries in its ROWS and a short list of headline
+# items in its columns; Table 5.1 transposes that -- the full balance-sheet
+# and income-statement stub in its rows, industries across its columns -- so
+# the two scripts differ mainly in which dimension the sector list is matched
+# against. What they share is INDUSTRIES below.
 #
 # WHY SECTOR LEVEL: minor-industry labels drift with every NAICS revision
 # (2002, 2007, 2012, 2017), which needs a per-revision concordance; the 19
@@ -26,11 +34,12 @@
 # SIC-coded, and only a coarse division-level bridge would be defensible.
 # Both cuts are deliberate -- see notes/industry_tables.md.
 #
-# Row selection is by canonical sector NAME, not by stub indentation: the
-# published indent is unusable as a level marker (SOI wraps sectors in
-# supersectors in 1998-99, indents Utilities differently from its siblings,
-# and drops stub indentation entirely from 2017 on). Every year must yield
-# all 19 sectors or the run fails.
+# Sector selection is by canonical NAME, never by position or by the published
+# hierarchy markers: stub indentation is unusable as a level marker (SOI wraps
+# sectors in supersectors in 1998-99, indents Utilities differently from its
+# siblings, and drops stub indentation entirely from 2017 on), and merged-cell
+# spanners do not exist before 2003. Every year must yield all 19 sectors or
+# the run fails.
 #
 # Usage:
 #   Rscript align_industry.R [--dest /path/to/store]
@@ -53,30 +62,259 @@ if (length(args) > 0 && args[1] == '--dest') {
   dest = args[2]
 }
 
-T1_YEARS = 1998:2022
+# NAICS starts in 1998 and Pub 16 currently ends at TY2022
+INDUSTRY_YEARS = 1998:2022
+
+#=============================================================================
+# The industry dimension, shared by every panel below
+#=============================================================================
+
+# The 19 NAICS sectors SOI publishes, in published order, under their modern
+# labels. Aggregates that also sit at sector level -- the 1998-99 supersectors
+# ("Goods production", ...) and "Wholesale and retail trade" (= wholesale +
+# retail + their not-allocable residual) -- are deliberately NOT here: keeping
+# them would double count.
+SECTORS = c(
+  'agriculture, forestry, fishing and hunting', 'mining', 'utilities',
+  'construction', 'manufacturing', 'wholesale trade', 'retail trade',
+  'transportation and warehousing', 'information', 'finance and insurance',
+  'real estate and rental and leasing',
+  'professional, scientific, and technical services',
+  'management of companies (holding companies)',
+  'administrative and support and waste management and remediation services',
+  'educational services', 'health care and social assistance',
+  'arts, entertainment, and recreation', 'accommodation and food services',
+  'other services')
+
+ALL_INDUSTRIES = 'total returns of active corporations'
+
+# Residual rows/columns, published 1998-2013 only: returns SOI could not
+# assign to a sector. Kept (as row_type 'not_allocable') so that sectors +
+# residuals reconcile against the all-industries total in those years; the
+# modern tables have no such rows.
+NOT_ALLOCABLE = c('wholesale and retail trade not allocable', 'not allocable')
+
+INDUSTRIES = c(ALL_INDUSTRIES, SECTORS, NOT_ALLOCABLE)
+
+# The one aggregate SOI nests two of the sectors inside. It gets a row of its
+# own in Table 1 and a column of its own in Table 5.1, both excluded above --
+# but its name also stacks on top of the two sectors it encloses, which the
+# column search below has to read through.
+AGGREGATES = 'wholesale and retail trade'
+
+# Published variant -> canonical, keyed on the match key below. Curated from
+# the per-year stub and header surveys.
+#   * the administrative sector's long name wraps over TWO stub lines in
+#     Table 1 1998-2006, and because the first line carries no data,
+#     extract_sheet treats it as a section header and the sector's data lands
+#     on the second line, "and remediation services";
+#   * Table 5.1 heads the all-industries column "All industries" where Table 1
+#     labels the same universe "Total returns of active corporations";
+#   * TY1998 Table 6 misspells Accommodation.
+INDUSTRY_ALIASES = c(
+  'and remediation services' =
+    'administrative and support and waste management and remediation services',
+  'wholesale and retail not allocable' =
+    'wholesale and retail trade not allocable',
+  'all industries' = ALL_INDUSTRIES,
+  'accomodation and food services' = 'accommodation and food services'
+)
+
+# Comparison key for an industry label. Ampersands are spelled out (the
+# 1998-99 Table 1 vintages write "Agriculture, forestry, fishing & hunting")
+# and punctuation is dropped, because SOI's serial comma wanders between
+# tables -- Table 1 heads the sector "fishing and hunting", Table 5.1
+# "fishing, and hunting". normalize_label() has already stripped footnote
+# refs and dot leaders.
+match_key = function(label) {
+  k = tolower(label)
+  k = gsub('&', ' and ', k)
+  k = gsub("[[:punct:]]", ' ', k)
+  trimws(gsub('\\s+', ' ', k))
+}
+
+INDUSTRY_MATCH = match_key(INDUSTRIES)
+
+# A published label -> the canonical industry name it denotes, or NA for
+# everything we do not keep (minor industries, supersectors, the wholesale and
+# retail trade aggregate). Returning the canonical string rather than the
+# published one is what makes the panels joinable across tables.
+canonical_industry = function(label) {
+  k = match_key(label)
+  k = ifelse(k %in% names(INDUSTRY_ALIASES), unname(INDUSTRY_ALIASES[k]), k)
+  INDUSTRIES[match(k, INDUSTRY_MATCH)]
+}
+
+row_type_of = function(industry) {
+  ifelse(industry == ALL_INDUSTRIES, 'all_industries',
+         ifelse(industry %in% NOT_ALLOCABLE, 'not_allocable', 'sector'))
+}
+
+#=============================================================================
+# Checks shared by the panels
+#=============================================================================
+
+#-------------------------------------------------------------
+# Vintage repair: TY2007 is published without its minus signs
+#-------------------------------------------------------------
+
+# SOI's TY2007 files were typeset with minus signs stripped from part of the
+# body: 07co06ccr.xls holds 6 negative cells where the vintages either side
+# hold 46 (TY2006) and 68 (TY2008). Three identities agree on which published
+# cells lost their sign, and each closes to rounding once they are restored:
+#
+#   * Table 5.1's equity build-up (capital stock + additional paid-in capital
+#     + retained earnings appropriated + retained earnings unappropriated -
+#     cost of treasury stock) reproduces Table 1's independently published net
+#     worth for EVERY industry in TY2006 and TY2008. In TY2007 it overshoots
+#     for six industries, each time by exactly twice that industry's retained
+#     earnings, unappropriated.
+#   * With those six restored, Table 5.1's sector detail adds to its
+#     all-industries total to 9e-10, from 15.4% out. The one pair of TY2007
+#     cells whose restoration likewise closes net short-term capital gain --
+#     the only other item that fails -- is information and accommodation and
+#     food services (1.1e-08, from 4.6% out); no other subset closes it.
+#   * Table 1's own net worth row is stripped for the two not-allocable
+#     residuals. That accounts for the whole of its 2.5e-06 gap, which was
+#     otherwise the worst in that panel; restoring the two closes it to 3e-11.
+#
+# The sign is all that is wrong -- every magnitude is confirmed by the
+# identity it sits in -- so the cells are restored rather than dropped. Both
+# panels assert afterwards that their sums close.
+TY2007_UNSIGNED = list(
+  table_01 = list(
+    'net worth' = NOT_ALLOCABLE),
+  table_05_1 = list(
+    'retained earnings, unappropriated' =
+      c('information', 'professional, scientific, and technical services',
+        'health care and social assistance',
+        'arts, entertainment, and recreation', NOT_ALLOCABLE),
+    'net short-term capital gain less net long-term loss' =
+      c('information', 'accommodation and food services'),
+    # the two residual columns again, on the pair of net items where their
+    # loss shows: flipping both moves each sum by 64,726 against gaps of
+    # 64,725 and 64,727, and the vintages either side close to a single unit
+    'total receipts less total deductions' = NOT_ALLOCABLE,
+    'net income (less deficit)'            = NOT_ALLOCABLE)
+)
+
+restore_ty2007_signs = function(panel, id) {
+  for (item in names(TY2007_UNSIGNED[[id]])) {
+    industries = TY2007_UNSIGNED[[id]][[item]]
+    hit = panel$tax_year == 2007 & panel$item == item &
+      panel$industry %in% industries
+    if (sum(hit) != length(industries)) {
+      stop(sprintf('%s TY2007 sign repair: expected %d cells of "%s", found %d',
+                   id, length(industries), item, sum(hit)))
+    }
+    if (any(panel$value[hit] <= 0, na.rm = TRUE)) {
+      stop(sprintf('%s TY2007 sign repair: "%s" is not published unsigned',
+                   id, item))
+    }
+    panel$value[hit] = -panel$value[hit]
+    message(sprintf('  TY2007: restored the minus sign on %d %s cells',
+                    length(industries), item))
+  }
+  panel
+}
+
+# Sector detail must add to the all-industries total -- the check that guards
+# every choice below: which rows/columns are sectors, which are aggregates to
+# skip, and the tie-breaks for repeated labels. SOI rounds each cell to
+# thousands and warns that detail may not add to totals, so a gap has to clear
+# BOTH a relative and an absolute floor to count: one unit of the published
+# rounding is 1e-4 of a small item like TY1999 recapture taxes ($9.8 million),
+# which would otherwise fail on nothing. Items with any suppressed ('d') or
+# missing component are skipped because their sum is not defined. Real
+# structural errors land in the percent range, orders above either floor.
+check_sums = function(panel, tol = 1e-4, abs_tol = 2) {
+  worst = list()
+  for (year in unique(panel$tax_year)) {
+    p = panel[panel$tax_year == year, ]
+    for (item in unique(p$item)) {
+      pi = p[p$item == item, ]
+      parts = pi$value[pi$row_type %in% c('sector', 'not_allocable')]
+      total = pi$value[pi$row_type == 'all_industries']
+      if (length(total) != 1 || anyNA(parts) || is.na(total) || total == 0) next
+      worst[[length(worst) + 1]] =
+        data.frame(tax_year = year, item = item, total = total,
+                   sum_parts = sum(parts),
+                   abs_gap = abs(sum(parts) - total),
+                   rel_gap = abs(sum(parts) - total) / abs(total))
+    }
+  }
+  w = do.call(rbind, worst)
+  w = w[order(-w$rel_gap), ]
+  bad = w[w$rel_gap > tol & w$abs_gap > abs_tol, ]
+  if (nrow(bad) > 0) {
+    stop(sprintf('sector detail does not add to the total (tol %.1e):\n%s',
+                 tol,
+                 paste(sprintf('  %d %s: total %.0f vs sum %.0f (%.3f%%)',
+                               bad$tax_year, bad$item, bad$total,
+                               bad$sum_parts, 100 * bad$rel_gap),
+                       collapse = '\n')))
+  }
+  w
+}
+
+report_sums = function(label, panel, abs_tol = 2) {
+  gaps = check_sums(panel, abs_tol = abs_tol)
+  # report the worst gap that is more than the published rounding, so the
+  # headline number says something about structure rather than about a
+  # one-unit difference on a tiny item
+  material = gaps[gaps$abs_gap > abs_tol, ]
+  message(sprintf('%s sum check: %d year x item combinations, worst relative gap %.2e (%d %s)',
+                  label, nrow(gaps), material$rel_gap[1], material$tax_year[1],
+                  material$item[1]))
+}
+
+# All-industries and every sector present in every year (the residual rows are
+# published 1998-2013 only, so they are not required)
+check_every_year = function(label, panel) {
+  by_industry = table(unique(panel[, c('tax_year', 'industry')])$industry)
+  n_full = sum(by_industry == length(INDUSTRY_YEARS))
+  if (n_full < 1 + length(SECTORS)) {
+    stop(label, ': an industry is missing from at least one year')
+  }
+}
+
+write_panel = function(id, panel) {
+  dir.create(file.path(dest, 'aligned'), recursive = TRUE, showWarnings = FALSE)
+  out_path = file.path(dest, 'aligned', paste0(id, '.csv'))
+  write.csv(panel, out_path, row.names = FALSE, na = '')
+  message(sprintf('%s: wrote %s (%d rows; %d industries, %d items, %d years)',
+                  id, out_path, nrow(panel), length(unique(panel$industry)),
+                  length(unique(panel$item)), length(INDUSTRY_YEARS)))
+}
+
+#=============================================================================
+# Table 1 -- industries in the ROWS, headline items in the columns
+#=============================================================================
 
 #---------------------------------
 # Where Table 1 lives, by vintage
 #---------------------------------
 
+# Look up one file in an archive year, case-insensitively: several vintages
+# ship UPPERCASE .XLS extensions (1999/2001 Table 1, 2001 Table 1 CV).
+archive_file = function(year, pattern, what) {
+  dir = sprintf('archive/%d', year)
+  hit = list.files(file.path(dest, dir), pattern = pattern, ignore.case = TRUE)
+  if (length(hit) != 1) {
+    stop(sprintf('%d %s: expected one %s in %s, found %d',
+                 year, what, pattern, dir, length(hit)))
+  }
+  file.path(dir, hit)
+}
+
 # The modern files are one per year; the archive filenames change scheme
-# three times, and several vintages ship UPPERCASE .XLS extensions
-# (1999/2001), so the archive lookups are case-insensitive. Two splits to
-# know about: 2004-2005 put the estimates in the 'a' file and the CVs in the
-# 'b' file, and TY1998 publishes no separate CV file at all -- its CVs are
-# columns 21-40 of the estimates sheet, which the column-block selection in
-# t1_extract() picks out.
+# three times. Two splits to know about: 2004-2005 put the estimates in the
+# 'a' file and the CVs in the 'b' file, and TY1998 publishes no separate CV
+# file at all -- its CVs are columns 21-40 of the estimates sheet, which the
+# column-block selection in t1_extract() picks out.
 t1_file = function(year, measure) {
   yy = sprintf('%02d', year %% 100)
-  find = function(pattern) {
-    dir = sprintf('archive/%d', year)
-    hit = list.files(file.path(dest, dir), pattern = pattern, ignore.case = TRUE)
-    if (length(hit) != 1) {
-      stop(sprintf('%d %s: expected one %s in %s, found %d',
-                   year, measure, pattern, dir, length(hit)))
-    }
-    file.path(dir, hit)
-  }
+  find = function(pattern) archive_file(year, pattern, measure)
   if (measure == 'estimate') {
     if (year >= 2014) return(sprintf('modern/table_01/table_01_%d.xlsx', year))
     if (year >= 2006) return(find(sprintf('^%sco01ccr\\.xls$',  yy)))
@@ -152,58 +390,6 @@ T1_ITEM_CHECK = c(
   'depreciable assets'                       = 'depreciable',
   'depreciation deduction'                   = 'depreciation deduction'
 )
-
-#---------------------------------------
-# Industries: the rows we keep, and only those
-#---------------------------------------
-
-# The 19 NAICS sectors SOI publishes, in published order, under their modern
-# labels. Aggregates that also sit at sector level in the stub -- the
-# 1998-99 supersectors ("Goods production", ...) and "Wholesale and retail
-# trade" (= wholesale + retail + their not-allocable residual) -- are
-# deliberately NOT here: keeping them would double count.
-SECTORS = c(
-  'agriculture, forestry, fishing and hunting', 'mining', 'utilities',
-  'construction', 'manufacturing', 'wholesale trade', 'retail trade',
-  'transportation and warehousing', 'information', 'finance and insurance',
-  'real estate and rental and leasing',
-  'professional, scientific, and technical services',
-  'management of companies (holding companies)',
-  'administrative and support and waste management and remediation services',
-  'educational services', 'health care and social assistance',
-  'arts, entertainment, and recreation', 'accommodation and food services',
-  'other services')
-
-ALL_INDUSTRIES = 'total returns of active corporations'
-
-# Residual rows, published 1998-2013 only: returns SOI could not assign to a
-# sector. Kept (as row_type 'not_allocable') so that sectors + residuals
-# reconcile against the all-industries row in those years; the modern table
-# has no such rows.
-NOT_ALLOCABLE = c('wholesale and retail trade not allocable', 'not allocable')
-
-# Sector label variants -> canonical. Curated from the per-year stub survey.
-# The administrative sector is the interesting one: 1998-2006 wrap its long
-# name over TWO stub lines, and because the first line carries no data,
-# extract_sheet treats it as a section header and the sector's data lands on
-# the second line, "and remediation services".
-SECTOR_ALIASES = c(
-  'and remediation services' =
-    'administrative and support and waste management and remediation services',
-  'wholesale and retail not allocable' =
-    'wholesale and retail trade not allocable'
-)
-
-# Normalized industry key: ampersands spelled out (the 1998-99 vintages write
-# "Agriculture, forestry, fishing & hunting"), whitespace collapsed, then
-# aliases applied. normalize_label() has already stripped footnote refs and
-# dot leaders.
-industry_key = function(label) {
-  k = tolower(label)
-  k = gsub('&', 'and', k)
-  k = trimws(gsub('\\s+', ' ', k))
-  ifelse(k %in% names(SECTOR_ALIASES), unname(SECTOR_ALIASES[k]), k)
-}
 
 #-------------------------------------------------
 # Vintage repair: the TY2000 wholesale/retail block
@@ -306,106 +492,51 @@ t1_extract = function(year, measure) {
   df = df[df$col_seq %in% hdr$col_seq, ]
   df$item = items[match(df$col_seq, hdr$col_seq)]
   df = repair_rotated_block(df, year, items, measure)
-  df$key  = industry_key(df$row_label)
+  df$industry = canonical_industry(df$row_label)
 
-  # Pick the FIRST row carrying each wanted key. Duplicates exist: 1998-2003
-  # wrap some minor-industry labels so that a continuation fragment
+  # Pick the FIRST row carrying each wanted industry. Duplicates exist:
+  # 1998-2003 wrap some minor-industry labels so that a continuation fragment
   # ("manufacturing", lowercase) repeats a sector name further down the stub.
   # A sector row always precedes the minors beneath it, so first-by-row_seq
-  # is the sector; the class-sum check below is the guard on that rule.
-  want = c(ALL_INDUSTRIES, SECTORS, NOT_ALLOCABLE)
-  keep = df[df$key %in% want, ]
-  first_seq = tapply(keep$row_seq, keep$key, min)
-  keep = keep[keep$row_seq == first_seq[keep$key], ]
+  # is the sector; the sum check is the guard on that rule.
+  keep = df[!is.na(df$industry), ]
+  first_seq = tapply(keep$row_seq, keep$industry, min)
+  keep = keep[keep$row_seq == first_seq[keep$industry], ]
 
-  missing = setdiff(c(ALL_INDUSTRIES, SECTORS), unique(keep$key))
+  missing = setdiff(c(ALL_INDUSTRIES, SECTORS), unique(keep$industry))
   if (length(missing) > 0) {
     stop(sprintf('%s: sector row(s) not found: %s',
                  path, paste(missing, collapse = '; ')))
   }
-  keep$row_type = ifelse(keep$key == ALL_INDUSTRIES, 'all_industries',
-                  ifelse(keep$key %in% NOT_ALLOCABLE, 'not_allocable', 'sector'))
+  keep$row_type = row_type_of(keep$industry)
   keep$unit = if (measure == 'cv') 'cv_pct' else {
     ifelse(grepl('^number of returns', keep$item), 'count', 'thousand_usd')
   }
-  keep = keep[order(match(keep$key, want), match(keep$item, items)), ]
+  keep = keep[order(match(keep$industry, INDUSTRIES), match(keep$item, items)), ]
   data.frame(tax_year = year,
-             keep[, c('row_type', 'key', 'item', 'value', 'flag', 'unit')],
+             keep[, c('row_type', 'industry', 'item', 'value', 'flag', 'unit')],
              row.names = NULL, stringsAsFactors = FALSE)
 }
 
-#---------------------------
-# Build and verify the panels
-#---------------------------
-
-build_panel = function(measure) {
-  panels = lapply(T1_YEARS, function(year) {
+build_t1 = function(measure) {
+  panels = lapply(INDUSTRY_YEARS, function(year) {
     p = t1_extract(year, measure)
     message(sprintf('  %d: %3d industries x %2d items = %4d cells  [%s]',
-                    year, length(unique(p$key)), length(unique(p$item)),
+                    year, length(unique(p$industry)), length(unique(p$item)),
                     nrow(p), basename(t1_file(year, measure))))
     p
   })
-  panel = do.call(rbind, panels)
-  names(panel)[names(panel) == 'key'] = 'industry'
-  panel
+  do.call(rbind, panels)
 }
 
 message('table_01 (estimates)')
-panel = build_panel('estimate')
-
-# Sector detail must add to the all-industries row -- the check that guards
-# every choice above: which rows are sectors, which are aggregates to skip,
-# and the first-occurrence rule for repeated labels. SOI rounds each cell to
-# thousands and warns that detail may not add to totals, so the test is on
-# relative gap; items with any suppressed ('d') or missing component are
-# skipped because their sum is not defined. The worst observed gap across
-# 1998-2022 is 2.5e-06 (2007 net worth), so 1e-04 leaves room for rounding
-# while still catching a structural error, which lands in the percent range.
-check_sums = function(panel, tol = 1e-4) {
-  worst = list()
-  for (year in unique(panel$tax_year)) {
-    p = panel[panel$tax_year == year, ]
-    for (item in unique(p$item)) {
-      pi = p[p$item == item, ]
-      parts = pi$value[pi$row_type %in% c('sector', 'not_allocable')]
-      total = pi$value[pi$row_type == 'all_industries']
-      if (length(total) != 1 || anyNA(parts) || is.na(total) || total == 0) next
-      gap = abs(sum(parts) - total) / abs(total)
-      worst[[length(worst) + 1]] =
-        data.frame(tax_year = year, item = item, total = total,
-                   sum_parts = sum(parts), rel_gap = gap)
-    }
-  }
-  w = do.call(rbind, worst)
-  w = w[order(-w$rel_gap), ]
-  bad = w[w$rel_gap > tol, ]
-  if (nrow(bad) > 0) {
-    stop(sprintf('sector detail does not add to the total (tol %.1e):\n%s',
-                 tol,
-                 paste(sprintf('  %d %s: total %.0f vs sum %.0f (%.3f%%)',
-                               bad$tax_year, bad$item, bad$total,
-                               bad$sum_parts, 100 * bad$rel_gap),
-                       collapse = '\n')))
-  }
-  w
-}
-gaps = check_sums(panel)
-message(sprintf('sum check: %d year x item combinations, worst relative gap %.2e (%d %s)',
-                nrow(gaps), gaps$rel_gap[1], gaps$tax_year[1], gaps$item[1]))
-
-n_years = length(T1_YEARS)
-every_year = function(panel) {
-  by_industry = table(unique(panel[, c('tax_year', 'industry')])$industry)
-  sum(by_industry == n_years) >= 1 + length(SECTORS)
-}
-if (!every_year(panel)) stop('an industry is missing from at least one year')
+panel = restore_ty2007_signs(build_t1('estimate'), 'table_01')
+report_sums('table_01', panel)
+check_every_year('table_01', panel)
 
 message('table_01_cv (coefficients of variation)')
-cv_panel = build_panel('cv')
-if (!every_year(cv_panel)) {
-  stop('table_01_cv: an industry is missing from at least one year')
-}
+cv_panel = build_t1('cv')
+check_every_year('table_01_cv', cv_panel)
 
 # The CV panel cannot be checked by addition -- CVs do not add -- so it is
 # checked against the estimates panel it must parallel, cell for cell.
@@ -451,13 +582,204 @@ if (min(cv_vals) < -1000 || max(cv_vals) > 1000) {
 message(sprintf('CV check: %d cells parallel the estimates exactly; CVs in [%.2f, %.2f], %d negative (negative estimates)',
                 nrow(cv_panel), min(cv_vals), max(cv_vals), neg))
 
-dir.create(file.path(dest, 'aligned'), recursive = TRUE, showWarnings = FALSE)
-for (out in list(list(id = 'table_01', p = panel),
-                 list(id = 'table_01_cv', p = cv_panel))) {
-  out_path = file.path(dest, 'aligned', paste0(out$id, '.csv'))
-  write.csv(out$p, out_path, row.names = FALSE, na = '')
-  message(sprintf('%s: wrote %s (%d rows; %d industries, %d items, %d years)',
-                  out$id, out_path, nrow(out$p),
-                  length(unique(out$p$industry)), length(unique(out$p$item)),
-                  n_years))
+write_panel('table_01', panel)
+write_panel('table_01_cv', cv_panel)
+
+#=============================================================================
+# Table 5.1 -- the full item stub in the ROWS, industries in the COLUMNS
+#=============================================================================
+
+#-----------------------------------
+# Where Table 5.1 lives, by vintage
+#-----------------------------------
+
+t51_file = function(year) {
+  if (year >= 2014) {
+    return(sprintf('modern/table_05_1/table_05_1_%d.xlsx', year))
+  }
+  yy = sprintf('%02d', year %% 100)
+  if (year >= 2004) return(archive_file(year, sprintf('^%sco06ccr\\.xls$', yy),
+                                        'table 5.1'))
+  archive_file(year, sprintf('^%sco06nr\\.xls$', yy), 'table 5.1')
 }
+
+#-------------------------------------------------
+# Which column is a sector's own column
+#-------------------------------------------------
+
+# A wide vintage repeats the spanner over each later printed panel, tagged
+# "-- continued" ("Manufacturing--continued Wood product manufacturing"); the
+# tagged copy names no column and comes off before anything else is read.
+strip_continued = function(hdr) {
+  gsub('[a-z0-9 ,&()./-]*--\\s*continued', ' ', tolower(hdr))
+}
+
+# Does this column report a whole block rather than one industry? Every
+# sector's own column is the "Total" of its block, whatever else stacked on
+# top of it.
+is_block_total = function(hdr) grepl('\\btotal\\b', strip_continued(hdr))
+
+# The industry a data column stands for, reduced from its stacked header by
+# dropping the "Total" that marks a block total rather than naming an
+# industry, and collapsing the doubled phrase left behind when the sector name
+# stacks over both the spanner row and the leaf ("Coal mining Coal mining").
+# What survives is the industry's own name for a sector total column, the
+# minor industry's name for a detail column, and nothing at all for a total
+# column whose block is named somewhere other than directly above it.
+block_key = function(hdr) {
+  k = match_key(gsub('\\btotal\\b', ' ', strip_continued(hdr)))
+  vapply(k, function(one) {
+    w = strsplit(one, ' ', fixed = TRUE)[[1]]
+    h = length(w) %/% 2
+    if (h > 0 && length(w) %% 2 == 0 && identical(w[1:h], w[(h + 1):(2 * h)])) {
+      one = paste(w[1:h], collapse = ' ')
+    }
+    one
+  }, character(1), USE.NAMES = FALSE)
+}
+
+# Map every data column onto the industry it reports, NA for the ones we drop
+# (minor industries, the supersectors, the wholesale and retail trade
+# aggregate). Three passes, each catching what the one before could not.
+column_industry = function(col_label) {
+  bkey = block_key(col_label)
+  total = is_block_total(col_label)
+  industry = canonical_industry(bkey)
+
+  # (2) Wholesale and retail trade nest inside an aggregate whose spanner
+  # stacks on top of theirs, so from 2007 on the wholesale column is headed
+  # "Wholesale and retail trade Wholesale trade Total" -- aggregate name and
+  # then its own. Only that exact composition counts: matching a bare suffix
+  # would hand Retail trade the AGGREGATE's own column, whose key ends in the
+  # same two words.
+  for (sector in setdiff(SECTORS, industry)) {
+    nested = paste(match_key(AGGREGATES), match_key(sector))
+    hit = which(total & is.na(industry) & bkey %in% nested)
+    if (length(hit) > 0) industry[hit[1]] = sector
+  }
+
+  # (3) TY1998 and TY2000 CENTRE each spanner over its block instead of
+  # anchoring it, so the name lands on one of the block's minor industries and
+  # the sector's own column is left headed bare "Total" -- "Agriculture,
+  # forestry, fishing, and hunting" sits over "Agricultural production", and
+  # "Manufacturing" two columns further on over "Beverage and tobacco product
+  # manufacturing". Centred text still falls inside its own block, so the
+  # sector's column is the last unclaimed block total at or before the
+  # leftmost column whose header its name opens. Sectors are resolved in
+  # published (left-to-right) order, so each takes the nearest total its
+  # predecessors have not already taken.
+  for (sector in setdiff(c(ALL_INDUSTRIES, SECTORS), industry)) {
+    opens = startsWith(bkey, paste0(match_key(sector), ' '))
+    if (!any(opens)) next
+    cand = which(total & is.na(industry))
+    cand = cand[cand <= min(which(opens))]
+    if (length(cand) == 0) next
+    industry[max(cand)] = sector
+  }
+  industry
+}
+
+#-------------------------------------------------
+# Which row is which item
+#-------------------------------------------------
+
+# SOI breaks a long item name over two stub lines and puts the data on the
+# SECOND, so extract_sheet reads the first line as a section header
+# ("Mortgages, notes, and bonds payable in less" + "than one year"). Every
+# section header this table produces, in all 25 vintages, is such a wrap, so
+# the row directly below one is glued back onto it -- which reproduces the
+# published label and lets ITEM_ALIASES harmonize it like any other.
+t51_row_items = function(df) {
+  rows = unique(df[, c('row_seq', 'section', 'row_label')])
+  rows = rows[order(rows$row_seq), ]
+  prev = c(NA_character_, head(rows$section, -1))
+  wrapped = !is.na(rows$section) & (is.na(prev) | rows$section != prev)
+  rows$item = apply_alias(ifelse(wrapped, paste(rows$section, rows$row_label),
+                                 rows$row_label))
+  rows[, c('row_seq', 'item')]
+}
+
+#--------------------
+# Parse one vintage
+#--------------------
+
+t51_extract = function(year) {
+  path = file.path(dest, t51_file(year))
+  if (!file.exists(path)) {
+    stop('missing input (run download_irs_corp.R first): ', path)
+  }
+  df = extract_sheet(path, script_dir)
+
+  hdr = unique(df[, c('col_seq', 'col_label')])
+  hdr = hdr[order(hdr$col_seq), ]
+  hdr$industry = column_industry(hdr$col_label)
+  missing = setdiff(c(ALL_INDUSTRIES, SECTORS), hdr$industry)
+  if (length(missing) > 0) {
+    stop(sprintf('%s: sector column(s) not found: %s',
+                 path, paste(missing, collapse = '; ')))
+  }
+  named = hdr[!is.na(hdr$industry), ]
+  if (anyDuplicated(named$industry)) {
+    dup = named$industry[duplicated(named$industry)][1]
+    stop(sprintf('%s: two columns claim industry "%s"', path, dup))
+  }
+
+  keep = df[df$col_seq %in% named$col_seq, ]
+  keep$industry = named$industry[match(keep$col_seq, named$col_seq)]
+  items = t51_row_items(df)
+  keep$item = items$item[match(keep$row_seq, items$row_seq)]
+  if (anyDuplicated(keep[, c('industry', 'item')])) {
+    dup = keep[duplicated(keep[, c('industry', 'item')]), ][1, ]
+    stop(sprintf('%s: duplicate industry x item cell ("%s", "%s")',
+                 path, dup$industry, dup$item))
+  }
+
+  keep$row_type = row_type_of(keep$industry)
+  keep$unit = ifelse(grepl('^number of', keep$item), 'count', 'thousand_usd')
+  keep = keep[order(match(keep$industry, INDUSTRIES), keep$row_seq), ]
+  data.frame(tax_year = year,
+             keep[, c('row_type', 'industry', 'item', 'value', 'flag', 'unit')],
+             row.names = NULL, stringsAsFactors = FALSE)
+}
+
+message('table_05_1 (balance sheet, income statement and tax by industry)')
+t51 = do.call(rbind, lapply(INDUSTRY_YEARS, function(year) {
+  p = t51_extract(year)
+  message(sprintf('  %d: %3d industries x %2d items = %4d cells  [%s]',
+                  year, length(unique(p$industry)), length(unique(p$item)),
+                  nrow(p), basename(t51_file(year))))
+  p
+}))
+t51 = restore_ty2007_signs(t51, 'table_05_1')
+report_sums('table_05_1', t51)
+check_every_year('table_05_1', t51)
+
+# Table 5.1 and Table 1 estimate several of the same quantities for the same
+# industries, from the same sample, so the overlap is a free cross-check on
+# both -- and on the sector columns picked above, which Table 1 arrives at by
+# an unrelated route (row labels, not column headers).
+T51_VS_T1 = c('number of returns' = 'number of returns',
+              'total receipts'    = 'total receipts',
+              'business receipts' = 'business receipts',
+              'cost of goods sold'= 'cost of goods sold',
+              'income subject to tax' = 'income subject to tax',
+              'total income tax before credits' = 'total income tax before credits',
+              'total income tax after credits'  = 'total income tax after credits')
+overlap = merge(
+  transform(t51[t51$item %in% names(T51_VS_T1), ],
+            item = unname(T51_VS_T1[item]), t51 = value)[
+              , c('tax_year', 'industry', 'item', 't51')],
+  transform(panel, t1 = value)[, c('tax_year', 'industry', 'item', 't1')],
+  by = c('tax_year', 'industry', 'item'))
+ok = !is.na(overlap$t51) & !is.na(overlap$t1) & overlap$t1 != 0
+overlap$rel = abs(overlap$t51 - overlap$t1) / abs(overlap$t1)
+worst = overlap[ok, ][order(-overlap$rel[ok]), ][1, ]
+if (worst$rel > 1e-3) {
+  stop(sprintf('table_05_1 disagrees with table_01: %d %s %s -- %.0f vs %.0f (%.2f%%)',
+               worst$tax_year, worst$industry, worst$item, worst$t51,
+               worst$t1, 100 * worst$rel))
+}
+message(sprintf('table_05_1 vs table_01: %d shared cells agree, worst relative gap %.2e (%d %s %s)',
+                sum(ok), worst$rel, worst$tax_year, worst$industry, worst$item))
+
+write_panel('table_05_1', t51)

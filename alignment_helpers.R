@@ -23,11 +23,18 @@ suppressMessages(library(readxl))
 # LEADING whitespace, which carries the industry hierarchy in the Table 1
 # family stubs (all eras, including the modern xlsx -- readxl's default
 # trim_ws would silently destroy it).
+#
+# The read is anchored at A1. Left to itself readxl drops leading blank rows
+# and columns, which would put the matrix out of step with the absolute
+# coordinates sheet_merges() reads from the file -- the TY2004 Table 6 sheet
+# opens with a blank row, and one row of drift is enough to blank the wrong
+# header cells.
 read_sheet_matrix = function(path, helper_dir, trim = 'both') {
   m = tryCatch({
     d = suppressWarnings(suppressMessages(
       read_excel(path, col_names = FALSE, col_types = 'text',
-                 .name_repair = 'minimal', trim_ws = FALSE)))
+                 .name_repair = 'minimal', trim_ws = FALSE,
+                 range = cell_limits(c(1, 1), c(NA, NA)))))
     as.matrix(d)
   }, error = function(e) NULL)
   if (is.null(m)) {
@@ -56,11 +63,27 @@ read_sheet_matrix = function(path, helper_dir, trim = 'both') {
 # Locate the column-number row
 #--------------------------------
 
+# A strictly-increasing integer run, allowing the occasional skipped number
+# (2014 Table 5.1 jumps 25 -> 27), which is what a column-number row is.
+well_formed_run = function(run) {
+  all(run == round(run)) && max(run) < 1000 && all(diff(run) >= 1) &&
+    mean(diff(run) == 1) >= 0.9
+}
+
+# The run a candidate row carries, or NULL. "(1) (2) ..." written in
+# accounting format arrives as -1 -2 ..., and a vintage may MIX the two
+# conventions within one row (TY1998 Table 6 numbers its first printed panel
+# 1..7 and the remaining ten -8..-92), so absolute values are the fallback.
+numrow_run = function(v) {
+  if (well_formed_run(v)) return(v)
+  a = abs(v)
+  if (well_formed_run(a)) return(a)
+  NULL
+}
+
 # SOI marks data columns with a row of consecutive numbers under the header
 # block: "1 2 3 ...", "(1) (2) ...", and in continuation tables the sequence
-# starts above 1 (Table 1 part 2 numbers its columns 16, 17, ...). The
-# sequence occasionally skips a number (2014 Table 5.1 jumps 25 -> 27), so
-# accept strictly-increasing integer runs that are >= 90% consecutive.
+# starts above 1 (Table 1 part 2 numbers its columns 16, 17, ...).
 # Returns list(row, cols) or NULL if the vintage has no such row (some
 # early-2000s files) -- callers fall back to find_data_block().
 find_numrow = function(m, max_scan = 30) {
@@ -68,12 +91,8 @@ find_numrow = function(m, max_scan = 30) {
     v = suppressWarnings(as.numeric(gsub('^\\((.*)\\)$', '\\1', m[i, ])))
     idx = which(!is.na(v))
     if (length(idx) < 5) next
-    run = v[idx]
-    # "(1) (2) ..." stored as accounting-format numbers arrives as -1 -2 ...
-    if (all(run < 0)) run = -run
-    if (all(run == round(run)) && run[1] >= 1 && run[1] < 100 &&
-        max(run) < 1000 && all(diff(run) >= 1) &&
-        mean(diff(run) == 1) >= 0.9) {
+    run = numrow_run(v[idx])
+    if (!is.null(run) && run[1] >= 1 && run[1] < 100) {
       return(list(row = i, cols = idx, vals = run))
     }
   }
@@ -105,12 +124,9 @@ find_numrows = function(m) {
     v = suppressWarnings(as.numeric(gsub('^\\((.*)\\)$', '\\1', m[i, ])))
     idx = unname(which(!is.na(v)))
     if (length(idx) >= 5 && identical(unname(which(m[i, ] != '')), idx)) {
-      run = v[idx]
-      if (all(run < 0)) run = -run
+      run = numrow_run(v[idx])
       prev = panels[[length(panels)]]$vals
-      well_formed = all(run == round(run)) && max(run) < 1000 &&
-        all(diff(run) >= 1) && mean(diff(run) == 1) >= 0.9
-      kind = if (!well_formed) NA_character_
+      kind = if (is.null(run)) NA_character_
              else if (identical(run, first$vals)) 'rows'
              else if (run[1] == max(prev) + 1) 'cols'
              else NA_character_
@@ -150,7 +166,8 @@ find_data_block = function(m, first_item_regex) {
 #----------------------
 
 normalize_label = function(x) {
-  x = gsub('\\[[0-9]+\\]', '', x)   # footnote refs
+  # footnote refs, singly or in a list ("Total deductions [1,2]" in TY2018)
+  x = gsub('\\[[0-9]+(\\s*,\\s*[0-9]+)*\\]', '', x)
   x = gsub('[.*]+$', '', trimws(x)) # trailing dot leaders / asterisks
   trimws(gsub('\\s+', ' ', x))
 }
@@ -189,6 +206,27 @@ clean_value = function(x, paren_negative = TRUE) {
   list(value = if (neg) -val else val, flag = flag)
 }
 
+# Blank every cell a merged range covers except the range's own anchor. Those
+# cells are invisible in the published sheet but may still hold text, and the
+# modern Table 5.1 files are full of it: each column header is merged down
+# rows 5-11 over the PREVIOUS layout's wrapped label, so column 104 carries
+# both "Farm product raw material" (what the table shows) and "Sporting
+# goods, hobby, book, and music stores" (what it showed in an earlier year).
+# Stacking without this glues the two together.
+blank_covered = function(m, merges) {
+  for (r in seq_len(nrow(merges))) {
+    rows = merges$first_row[r]:merges$last_row[r]
+    cols = merges$first_col[r]:merges$last_col[r]
+    rows = rows[rows <= nrow(m)]
+    cols = cols[cols <= ncol(m)]
+    if (length(rows) == 0 || length(cols) == 0) next
+    anchor = m[rows[1], cols[1]]
+    m[rows, cols] = ''
+    m[rows[1], cols[1]] = anchor
+  }
+  m
+}
+
 # Stacked header text for each data column: everything in the header rows
 # in that column, whitespace-collapsed (headers wrap across rows and lines).
 # hdr_rows is the vector of row indices forming the header block (for a
@@ -196,7 +234,11 @@ clean_value = function(x, paren_negative = TRUE) {
 # Title/units lines are excluded: they occupy a single (often merged) cell
 # with long text, sometimes sitting IN a data column (2004-06 vintages), so
 # drop header rows whose only non-empty data-column cell is a long sentence.
-stack_headers = function(m, hdr_rows, cols) {
+stack_headers = function(m, hdr_rows, cols, merges = NULL) {
+  if (!is.null(merges) && nrow(merges) > 0) {
+    hdr = merges[merges$first_row %in% hdr_rows, , drop = FALSE]
+    if (nrow(hdr) > 0) m = blank_covered(m, hdr)
+  }
   keep = vapply(hdr_rows, function(i) {
     filled = which(m[i, cols] != '')
     !(length(filled) == 1 && nchar(m[i, cols[filled]]) > 40)
@@ -284,6 +326,99 @@ col_groups = function(m, hdr_rows, cols, merges) {
   vapply(cols, function(j) {
     paste(mg$text[mg$first_col <= j & mg$last_col >= j], collapse = ' > ')
   }, character(1))
+}
+
+#----------------------------------------
+# Item labels: drift harmonization
+#----------------------------------------
+
+# Variant -> canonical item label across eras, canonical being the modern
+# label where one exists. Shared by every panel whose ROWS (or, in the
+# industry-column tables, whose stub) are the balance-sheet / income-statement
+# items: the same stub is published in Tables 2, 3, 5, 6 and their modern
+# successors, so one table serves all of them. Curated from the coverage
+# report; each cross-era merge was verified by value continuity at the seam
+# (e.g. "rents" $160.2B in 2013 -> "gross rents" $174.6B in 2014, and
+# "income tax, total" 1994 = $172.8B matches Table 4's before-credits total).
+ITEM_ALIASES = c(
+  'number of returns, total'        = 'number of returns',
+  'loans to stockholders'           = 'loans to shareholders',
+  'loans from stockholders'         = 'loans from shareholders',
+  'contributions or gifts'          = 'charitable contributions',
+  'income tax, total'               = 'total income tax before credits',
+  'income tax after credits'        = 'total income tax after credits',
+  'investments in government obligations' = 'u.s. government obligations',
+  'notes and accounts receivable'   = 'trade notes and accounts receivable',
+  'taxes paid'                      = 'taxes and licenses',
+  'rents'                           = 'gross rents',
+  'royalties'                       = 'gross royalties',
+  'rent paid on business property'  = 'rents paid',
+  'repairs'                         = 'repairs and maintenance',
+  'paid-in or capital surplus'      = 'additional paid-in capital',
+
+  'mortgages, notes, and bonds payable in less than one year' =
+    'mortgages, notes, bonds payable in less than 1 year',
+  'mortgages,notes,and bonds payable in less than one year' =
+    'mortgages, notes, bonds payable in less than 1 year',
+  'mortgages, notes, and bonds under one year' =
+    'mortgages, notes, bonds payable in less than 1 year',
+  'mortgages, notes, bonds payable less than 1 yr' =
+    'mortgages, notes, bonds payable in less than 1 year',
+  # TY2013 Table 6 drops the "less" from the published stub
+  'mortgages, notes, and bonds payable in than one year' =
+    'mortgages, notes, bonds payable in less than 1 year',
+  'mortgages, notes, and bonds payable in one year or more' =
+    'mortgages, notes, bonds payable in 1 year or more',
+  'mortgages,notes,and bonds payable in one year or more' =
+    'mortgages, notes, bonds payable in 1 year or more',
+  'mortgages, notes, bonds, one year or more' =
+    'mortgages, notes, bonds payable in 1 year or more',
+  'mortgages, notes, bonds payable 1 yr. or more' =
+    'mortgages, notes, bonds payable in 1 year or more',
+
+  'net long-term capital gain reduced by net short-term capital loss' =
+    'net long-term capital gain less net short-term loss',
+  'net l-t capital gain less net s-t loss' =
+    'net long-term capital gain less net short-term loss',
+  'net l-t capital gain less net st loss' =
+    'net long-term capital gain less net short-term loss',
+  'net short-term capital gain reduced by net long-term capital loss' =
+    'net short-term capital gain less net long-term loss',
+  'net short-term-capital gain reduced by net long-term capital loss' =
+    'net short-term capital gain less net long-term loss',
+  'net s-t capital gain less net l-t loss' =
+    'net short-term capital gain less net long-term loss',
+  'net s-t capital gain less net lt loss' =
+    'net short-term capital gain less net long-term loss',
+
+  'pension, profit-sharing, stock bonus, and annuity plans' =
+    'pension, profit-sharing, etc., plans',
+  'pension,profit-sharing,stock bonus, annuity plans' =
+    'pension, profit-sharing, etc., plans',
+  'pension, profit-sharing, stock, annuity' =
+    'pension, profit-sharing, etc., plans',
+  'pension, profit sharing, stock, annuity' =
+    'pension, profit-sharing, etc., plans',
+
+  'interest on govt. obligations, total' =
+    'interest on government obligations, total',
+  'u.s. govt. obligations, total' =
+    'u.s. government obligations, total',
+  'interest on government obligations: state, local' =
+    'interest on government obligations: state and local',
+  # extract_sheet strips the colon when it turns a wrapped stub's first line
+  # into a section, so the glued-back label arrives without one
+  'interest on government obligations state and local' =
+    'interest on government obligations: state and local',
+  # 1994-2003 Table 5 wraps one combined asset item over two stub lines; the
+  # data sits on the second line ("securities, and other current assets")
+  'securities, and other current assets' =
+    'cash, govt. obligations, tax-exempt securities, and other current assets'
+)
+
+apply_alias = function(label) {
+  key = tolower(label)
+  ifelse(key %in% names(ITEM_ALIASES), unname(ITEM_ALIASES[key]), key)
 }
 
 #-------------------------------------
@@ -400,7 +535,7 @@ extract_sheet = function(path, helper_dir, paren_negative = TRUE) {
   for (k in seq_along(panels)) {
     p = panels[[k]]
     col_off = offsets[k]
-    headers = stack_headers(m, p$hdr_rows, p$cols)
+    headers = stack_headers(m, p$hdr_rows, p$cols, merges)
     groups  = col_groups(m, p$hdr_rows, p$cols, merges)
     label_cols = seq_len(min(p$cols) - 1)
     min_cells  = max(2, ceiling(0.1 * length(p$cols)))

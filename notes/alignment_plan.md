@@ -25,10 +25,11 @@ page][archive] · [SOI's 2014 table-number crosswalk][xwalk] (mirrored at
 | `aligned/modern/{table_id}.csv`, all 26 tables | 2014–2022 | generic long panels + `_coverage.csv` label-drift report |
 | `aligned/table_01.csv` | 1998–2022 | Table 1 ← old Table 1, **sector level** ([industry_tables.md](industry_tables.md)) |
 | `aligned/table_01_cv.csv` | 1998–2022 | Table 1 CV ← old Table 1 CV, same shape |
+| `aligned/table_05_1.csv` | 1998–2022 | Table 5.1 ← old Table 6, sector level — items × industry **columns** |
 
-Everything alignable by pure text-label matching is done, and the first
-industry panel (Table 1 at sector level) is built. The remaining work is
-tiered by what blocks it.
+Everything alignable by pure text-label matching is done, and the industry
+tables are aligned at sector level in both orientations — rows (Table 1) and
+columns (Table 5.1). The remaining work is tiered by what blocks it.
 
 ## Tier 1 — industry tables, NAICS era (1998 → present). The big prize.
 
@@ -43,7 +44,8 @@ mid-panel in Table 5.1).
 |---|---|---|---|
 | [Table 1][pub16] (`{yy}co01ccr.xlsx`) | old 1 (`{yy}co01ccr.xls` 2004+, `{yy}co01nr.xls` 98–03) | industry rows × item cols | **DONE at sector level** → `aligned/table_01.csv` |
 | [Table 1 CV][pub16] (`{yy}co01cvccr.xlsx`) | old 1cv (`{yy}co01cv.xls`) | same | **DONE at sector level** → `aligned/table_01_cv.csv` |
-| [Tables 5.1–5.4][pub16] (`{yy}co51–54ccr.xlsx`) | old 6, 7, 12, 13 | items × industry cols | old files: item stubs ≈ Table 2 alias set |
+| [Table 5.1][pub16] (`{yy}co51ccr.xlsx`) | old 6 (`{yy}co06ccr.xls` 2004+, `{yy}co06nr.xls` 98–03) | items × industry cols | **DONE at sector level** → `aligned/table_05_1.csv` |
+| [Tables 5.2–5.4][pub16] (`{yy}co52–54ccr.xlsx`) | old 7, 12, 13 | items × industry cols | same shape and machinery as 5.1; item stubs already aliased |
 
 Two levels of ambition:
 
@@ -66,9 +68,14 @@ hierarchy: `row_indent` (stub leading spaces, all eras) and `col_group`
 (merged-cell spanners; empty pre-2003 where files carry no merge records).
 Mechanics and per-era caveats in
 [modern_tables.md](modern_tables.md#industry-dimension-machinery-the-tier-1-engine-prerequisite-done-2026-08).
-Remaining spec-level wrinkle for Table 1: 2004+ splits its two column
-panels into `{yy}co01accr.xls` / `{yy}co01bccr.xls` — the file map must
-carry both parts.
+Table 5.1 added three more engine fixes every later table inherits: the
+sheet is read anchored at A1 (readxl otherwise drops leading blank rows and
+puts the matrix out of step with the absolute merge coordinates), text
+hidden under a merged header cell is blanked before headers are stacked
+(the modern 5.x files merge each column header over the *previous* layout's
+wrapped label), and a column-number row may mix plain and accounting-format
+numbers in one line (TY1998 Table 6 numbers its first printed panel 1..7 and
+the rest −8..−92).
 
 ## Tier 2 — shallower history, engine-ready
 
@@ -167,16 +174,22 @@ Notes from the survey:
    it also bought two engine fixes every later table inherits — paginated
    sheets (`find_numrows` kind `'rows'`) and parenthesised footnote references
    in percent tables (`clean_value(paren_negative = FALSE)`).
-3. **Table 5.1 sector-level** (all-corporation balance sheet by industry) —
-   reuses the 2.x item aliases; sectors are matched on the COLUMN dimension
-   there, using `col_group` where the vintage records merged cells.
-4. **1120S set** (2004/2006–2022) and Tables 10/11/12 at sector level.
-5. **Minor-industry concordance** only when a downstream consumer actually
+3. ~~**Table 5.1 sector-level**~~ — **done 2026-08**
+   (`aligned/table_05_1.csv`). It transposed the problem onto the column
+   dimension and paid for itself three times over: `ITEM_ALIASES` moved into
+   `alignment_helpers.R` where both aligners share it, the three engine fixes
+   above, and — via the Table 1 cross-check it now runs — the discovery that
+   **TY2007 was published with its minus signs stripped**, which had been
+   sitting unnoticed inside Table 1's net worth row.
+4. **Tables 5.2–5.4** — the same machinery, a different universe per table;
+   cheapest remaining industry work now that 5.1 has paid the setup cost.
+5. **1120S set** (2004/2006–2022) and Tables 10/11/12 at sector level.
+6. **Minor-industry concordance** only when a downstream consumer actually
    needs sub-sector detail.
-6. **Partnership repo** (proposal above) can start any time — the
+7. **Partnership repo** (proposal above) can start any time — the
    downloader + entity-type and asset-size panels don't depend on the
    corporate tiers; its industry tables should wait for whatever NAICS
-   concordance step 1/5 produce.
+   concordance steps 1–6 produce.
 
 Each step follows the established recipe: add a spec (per-era file map + the
 label/positional mapping) to `align_tables.R` for size-class panels or

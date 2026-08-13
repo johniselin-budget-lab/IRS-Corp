@@ -65,7 +65,9 @@ Mechanics and gotchas:
   first sector header. 1994–2003 vintages wrap one combined asset item over
   two stub lines; it appears as "cash, govt. obligations, tax-exempt
   securities, and other current assets".
-- **Item harmonization**: `ITEM_ALIASES` in align_tables.R maps label drift
+- **Item harmonization**: `ITEM_ALIASES` in alignment_helpers.R (it lives
+  there rather than in align_tables.R because Table 5.1's stub is the same
+  one) maps label drift
   to the modern label ("taxes paid"→"taxes and licenses", "rents"→"gross
   rents", "contributions or gifts"→"charitable contributions", the
   stockholders→shareholders and mortgages/notes/bonds renames, capital-gain
@@ -123,10 +125,26 @@ unchanged, verified cell-by-cell against the pre-change outputs):
   between multi-column spanners. Availability follows what the file
   format recorded: all 17 multi-column sectors in the modern 5.x, most
   2013-era .xls, only some 2004-era .xls, and NOTHING before ~2003 (no
-  merge records) — there `col_group` is ''. Sector-TOTAL columns don't
-  need it in any era: the spanner text physically sits in the sector's
-  first column, so their stacked `col_label` reads "Mining Total",
-  "Construction Total", etc.
+  merge records) — there `col_group` is ''. Sector-TOTAL columns usually
+  don't need it: the spanner text sits in the sector's first column, so
+  their stacked `col_label` reads "Mining Total", "Construction Total".
+  That is *usually*, not always — TY1998 and TY2000 centre the spanner over
+  its block instead, and from 2007 the enclosing aggregate stacks on top of
+  the wholesale and retail spanners. Finding the sector's own column takes
+  three rules, written up in
+  [industry_tables.md](industry_tables.md#sector-columns-three-passes-because-the-header-geometry-moves).
+- **Text hidden under merged header cells** is blanked before headers are
+  stacked. Those cells are invisible in the published sheet but may still
+  hold text: the modern 5.x files merge each column header down over the
+  PREVIOUS layout's wrapped label, so column 104 of the 2014 file carries
+  both "Farm product raw material" (what the table shows) and "Sporting
+  goods, hobby, book, and music stores" (what it showed in an earlier
+  year). This is also where "Coal mining Coal mining", "Construction Total
+  Total" and the 2.x "$1 under $500 under 500" echoes came from. The
+  masking needs the matrix to be in step with the file's absolute
+  coordinates, which is why `read_sheet_matrix` anchors its read at A1 —
+  readxl otherwise drops leading blank rows (TY2004 Table 6 opens with
+  one) and shifts everything up.
 
 ## Old-table counterparts NOT deep-aligned (roadmap)
 
@@ -134,8 +152,9 @@ From SOI's crosswalk (docs/table_crosswalk_2014.pdf), with why:
 
 | Modern | Old | Blocker |
 |---|---|---|
-| 1, 1cv | 1, 1cv | rows are minor industries — SIC pre-1998, NAICS revisions after; needs an industry concordance |
-| 5.1/5.2/5.3/5.4 | 6/7/12/13 | columns (modern) / rows (old) are industries; same concordance problem |
+| 1, 1cv | 1, 1cv | **aligned at SECTOR level 1998–2022** (`align_industry.R`); minor-industry detail still needs a concordance |
+| 5.1 | 6 | **aligned at SECTOR level 1998–2022**; same remaining blocker |
+| 5.2/5.3/5.4 | 7/12/13 | columns are industries; 5.1's machinery applies directly |
 | 6.1/6.2, 7, 8, 9, 3.2 | 1120S tables 7/8, 1, 5, 6, 4 | the `{yy}co0Xs.xls` 1120S files appear in the zips only for later years; industry dimension for 6.x/7 |
 | 10, 11, 12 | 10, 20, 26 | industry/sector dimension |
 | 2.4 | Corporation Source Book 3 | source book not part of this archive |

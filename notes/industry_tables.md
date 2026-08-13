@@ -187,13 +187,126 @@ Observed CV range across the panel: −230.90 to 691.25. Large values are real �
 SOI prints them for thin cells, e.g. net worth of the not-allocable rows — so
 the range assertion is deliberately loose and about structure, not statistics.
 
+## `aligned/table_05_1.csv` — Table 5.1 at sector level, 1998–2022
+
+Same schema as `table_01.csv`, so the two join on `(tax_year, industry)` and
+the three panels share one set of industry names. 38,746 cells: 22 industries
+× 74–79 items in 1998–2013, 20 × 68–69 from 2014. Where Table 1 puts
+industries in its rows and a short headline item list in its columns, Table
+5.1 transposes it — the full balance-sheet and income-statement stub in the
+rows, industries across the columns — so the same `align_industry.R` matches
+the sector list against the column headers instead of the stub.
+
+Both cuts carry over unchanged: sector level (the ~240 minor-industry columns
+drift at every NAICS revision) and a 1998 start (1994–97 are SIC).
+
+### Items are text labels, and reuse the 2.x alias set
+
+Unlike Table 1's positional columns, Table 5.1's rows are the same
+balance-sheet / income-statement stub published in Tables 2, 3 and 5, so they
+harmonize through the shared `ITEM_ALIASES` in `alignment_helpers.R` (moved
+there from `align_tables.R` when this panel started using it). 85 items
+appear across the span; **63 span all 25 years**. What does not:
+
+- `net worth, total`, `dividends`, `tax-exempt interest` — 2014 onwards only;
+  the pre-2014 table has no net-worth line and splits dividends into domestic
+  and foreign.
+- the credit and special-tax detail (`foreign tax credit`, `alternative
+  minimum tax`, `personal holding company tax`, …) — pre-2014 only, the same
+  thinning Table 1 shows.
+- `salaries and wages` is missing from **TY2001 only** — SOI's file genuinely
+  omits the line, going straight from cost of goods sold to compensation of
+  officers.
+
+Two label traps, both handled by machinery rather than by ad-hoc aliases:
+
+- **Wrapped stubs.** SOI breaks a long item over two stub lines and puts the
+  data on the second, so `extract_sheet` reads the first as a section header
+  ("Mortgages, notes, and bonds payable in less" + "than one year"). Every
+  section header this table produces in all 25 vintages is such a wrap, so the
+  row directly below one is glued back onto it, which reproduces the published
+  label exactly and lets the existing aliases do the rest.
+- **Footnote lists.** TY2018 writes "Total deductions [1,2]";
+  `normalize_label` now strips comma-separated footnote refs, not just single
+  ones.
+
+### Sector columns: three passes, because the header geometry moves
+
+The sector's own column is its block **total**. Finding it takes three rules,
+each for a era the one before cannot read:
+
+1. **The column names itself** — the spanner stacks onto its own "Total"
+   ("Mining", "Construction Total"). Covers 1999, 2001–2006 and 2014–2022.
+   Two things come off the stacked header first: the "-- continued" spanner a
+   wide vintage repeats over each later printed panel, and the doubled phrase
+   the modern files leave behind ("Coal mining Coal mining").
+2. **The enclosing aggregate stacks on top** — from 2007 the wholesale column
+   is headed "Wholesale and retail trade Wholesale trade Total". Only that
+   exact composition counts: matching a bare suffix would hand Retail trade
+   the *aggregate's* column, whose key ends in the same two words.
+3. **The spanner is centred, not anchored** — TY1998 and TY2000 place the
+   block's name over the middle of its columns, so it lands on a minor
+   industry and the sector's own column is headed bare "Total"
+   ("Agriculture, forestry, fishing, and hunting" sits over "Agricultural
+   production"; "Manufacturing" two columns before its own total). Centred
+   text still falls inside its block, so the sector's column is the last
+   unclaimed block total at or before the leftmost column its name opens.
+
+Aggregates are excluded by omission, exactly as in Table 1: "Wholesale and
+retail trade" has a column of its own and is not in `SECTORS`.
+
+### TY2007 is published without its minus signs
+
+`07co06ccr.xls` holds **6 negative cells** where the vintages either side hold
+46 (TY2006) and 68 (TY2008) — SOI typeset the file with minus signs stripped
+from part of the body. The affected cells are pinned down by identities, not
+inferred, and each closes to rounding once restored:
+
+- Table 5.1's equity build-up (capital stock + additional paid-in capital +
+  retained earnings appropriated + unappropriated − cost of treasury stock)
+  reproduces Table 1's independently published **net worth** for every
+  industry in TY2006 and TY2008. In TY2007 it overshoots for six industries,
+  each time by *exactly twice* that industry's retained earnings,
+  unappropriated. Restoring those six takes the sector-detail gap on that item
+  from **15.4% to 9e-10**.
+- The only pair of TY2007 cells whose restoration likewise closes net
+  short-term capital gain — the one other item failing outright — is
+  information and accommodation and food services (**4.6% → 1.1e-08**); no
+  other subset closes it.
+- The two not-allocable residual columns are stripped again on `total
+  receipts less total deductions` and `net income (less deficit)`: flipping
+  both moves each sum by 64,726 against gaps of 64,725 and 64,727, where every
+  neighbouring vintage closes to a single unit.
+- **Table 1 is stripped too** — its net worth row, for the same two residuals.
+  That accounts for the whole of the 2.5e-06 gap that was previously the worst
+  in that panel; restoring the two closes it to 3e-11 and drops the panel's
+  worst gap to 2.36e-06 (TY2001 U.S. possessions tax credit, three units of
+  rounding on $1.27 billion).
+
+Only the sign is wrong — every magnitude is confirmed by the identity it sits
+in — so the cells are restored rather than dropped, and both panels assert
+afterwards that their sums close.
+
+### What verifies the panel
+
+- **Sector sums**: detail + residuals = all-industries for every year × item,
+  1,706 combinations, worst relative gap **2.36e-06**. A gap now has to clear
+  both a relative and an absolute floor: one unit of the published rounding is
+  1e-4 of a small item like TY1999 recapture taxes ($9.8 million), which would
+  otherwise fail on nothing at all.
+- **Against Table 1**: the two tables estimate seven of the same quantities
+  for the same industries from the same sample, but reach them by unrelated
+  routes — row labels in one, column headers in the other. All **3,596**
+  shared cells agree; the worst gap is 4.28e-05 and is Table 1's fractional
+  return counts (2014 utilities, 6,695.71 against 6,696).
+- **Seams** smooth at 2003/04, 2006/07 and 2013/14; all-industries total
+  assets run $37.3T (1998) → $143.3T (2022), and `additional paid-in capital`
+  reproduces the `table_02_1` series year for year.
+
 ## Next increments
 
-- **Tables 5.1–5.4** (← old 6, 7, 12, 13): items × industry **columns**, so
-  the sector list is matched against `col_label`/`col_group` instead of the
-  stub. `col_group` gives the spanner path where the file records merges
-  (all of the modern 5.x, most 2013-era `.xls`, nothing before ~2003); sector
-  *total* columns are identifiable in every era because the spanner text sits
-  in the sector's first column ("Mining Total").
+- **Tables 5.2–5.4** (← old 7, 12, 13): the same shape as 5.1 and the same
+  column machinery; 5.2 is returns with net income, 5.3/5.4 the S-corporation
+  and other splits. The item stub is the one already aliased here.
 - **1120S set and Tables 10/11/12** at sector level, per
   [alignment_plan.md](alignment_plan.md) Tier 2.
