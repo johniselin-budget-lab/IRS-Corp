@@ -11,22 +11,27 @@
 # by the size-class panels there. Parsing itself is shared: both scripts use
 # extract_sheet() and ITEM_ALIASES from alignment_helpers.R.
 #
-# Builds:
-#   aligned/table_01.csv      Table 1 at SECTOR level, 1998-2022
+# Builds, all at NAICS SECTOR level and all 1998-2022:
+#   aligned/table_01.csv      Table 1
 #   aligned/table_01_cv.csv   its coefficients of variation, same shape
-#   aligned/table_05_1.csv    Table 5.1 at SECTOR level, 1998-2022
+#   aligned/table_05_1.csv    Table 5.1, all active corporations
+#   aligned/table_05_2.csv    Table 5.2, returns with net income
+#   aligned/table_05_3.csv    Table 5.3, active corporations other than
+#                             Forms 1120S, 1120-REIT and 1120-RIC
+#   aligned/table_05_4.csv    Table 5.4, the same exclusion on returns with
+#                             net income
 #     tax_year, row_type (all_industries | sector | not_allocable),
 #     industry, item, value, flag, unit
-#   All three panels share that schema and the same canonical industry names,
-#   so they join on (tax_year, industry) -- and the two Table 1 panels, built
-#   by the same code over a different file map, join cell for cell on
+#   Every panel shares that schema and the same canonical industry names, so
+#   they join on (tax_year, industry) -- and the two Table 1 panels, built by
+#   the same code over a different file map, join cell for cell on
 #   (tax_year, industry, item) so a CV sits beside its estimate.
 #
 # Table 1 carries the industries in its ROWS and a short list of headline
-# items in its columns; Table 5.1 transposes that -- the full balance-sheet
-# and income-statement stub in its rows, industries across its columns -- so
-# the two scripts differ mainly in which dimension the sector list is matched
-# against. What they share is INDUSTRIES below.
+# items in its columns; the 5.x family transposes that -- the full
+# balance-sheet and income-statement stub in the rows, industries across the
+# columns -- so the two halves of this script differ mainly in which dimension
+# the sector list is matched against. What they share is INDUSTRIES below.
 #
 # WHY SECTOR LEVEL: minor-industry labels drift with every NAICS revision
 # (2002, 2007, 2012, 2017), which needs a per-revision concordance; the 19
@@ -155,65 +160,95 @@ row_type_of = function(industry) {
 #=============================================================================
 
 #-------------------------------------------------------------
-# Vintage repair: TY2007 is published without its minus signs
+# Vintage repair: four files are published without minus signs
 #-------------------------------------------------------------
 
-# SOI's TY2007 files were typeset with minus signs stripped from part of the
-# body: 07co06ccr.xls holds 6 negative cells where the vintages either side
-# hold 46 (TY2006) and 68 (TY2008). Three identities agree on which published
-# cells lost their sign, and each closes to rounding once they are restored:
+# Some SOI files were typeset with minus signs stripped from part of the body,
+# which shows as a count of negative cells far below what the vintages either
+# side carry:
+#
+#   07co01ccr.xls, 07co06ccr.xls, 07co07ccr.xls  (Tables 1, 6, 7 for TY2007)
+#   08co13ccr.xls                                (Table 13 for TY2008)
+#
+# 07co06ccr.xls holds 6 negative cells against 46 in TY2006 and 68 in TY2008;
+# 08co13ccr.xls holds 6 against 24 in TY2007 and 17 in TY2009. Tables 12 and
+# the rest of the span are unaffected. Which published cells lost their sign is
+# established, not guessed -- every entry below both (a) is the ONLY set of
+# cells whose restoration makes that item's sector detail add to its total, as
+# searched over all subsets up to six industries to the nearest thousand, and
+# (b) is corroborated:
 #
 #   * Table 5.1's equity build-up (capital stock + additional paid-in capital
 #     + retained earnings appropriated + retained earnings unappropriated -
 #     cost of treasury stock) reproduces Table 1's independently published net
 #     worth for EVERY industry in TY2006 and TY2008. In TY2007 it overshoots
 #     for six industries, each time by exactly twice that industry's retained
-#     earnings, unappropriated.
-#   * With those six restored, Table 5.1's sector detail adds to its
-#     all-industries total to 9e-10, from 15.4% out. The one pair of TY2007
-#     cells whose restoration likewise closes net short-term capital gain --
-#     the only other item that fails -- is information and accommodation and
-#     food services (1.1e-08, from 4.6% out); no other subset closes it.
+#     earnings, unappropriated -- which is the set below. Restored, the sum
+#     closes to 9e-10, from 15.4% out.
+#   * The capital gain item names the same two industries in Tables 6 and 7
+#     independently, and TY2007 is the one year in which either is positive.
 #   * Table 1's own net worth row is stripped for the two not-allocable
 #     residuals. That accounts for the whole of its 2.5e-06 gap, which was
 #     otherwise the worst in that panel; restoring the two closes it to 3e-11.
+#   * Table 13's three TY2008 industries are negative in TY2006, TY2007 and
+#     TY2009 and positive only in TY2008; restored, the sum closes to 2.9e-10.
 #
-# The sign is all that is wrong -- every magnitude is confirmed by the
-# identity it sits in -- so the cells are restored rather than dropped. Both
-# panels assert afterwards that their sums close.
-TY2007_UNSIGNED = list(
-  table_01 = list(
-    'net worth' = NOT_ALLOCABLE),
-  table_05_1 = list(
-    'retained earnings, unappropriated' =
-      c('information', 'professional, scientific, and technical services',
-        'health care and social assistance',
-        'arts, entertainment, and recreation', NOT_ALLOCABLE),
-    'net short-term capital gain less net long-term loss' =
-      c('information', 'accommodation and food services'),
-    # the two residual columns again, on the pair of net items where their
-    # loss shows: flipping both moves each sum by 64,726 against gaps of
-    # 64,725 and 64,727, and the vintages either side close to a single unit
-    'total receipts less total deductions' = NOT_ALLOCABLE,
-    'net income (less deficit)'            = NOT_ALLOCABLE)
+# The sign is all that is wrong -- every magnitude is confirmed by the identity
+# it sits in -- so the cells are restored rather than dropped, and every panel
+# asserts afterwards that its sums close.
+UNSIGNED_CELLS = list(
+  list(id = 'table_01', year = 2007,
+       item = 'net worth', industries = NOT_ALLOCABLE),
+
+  list(id = 'table_05_1', year = 2007,
+       item = 'retained earnings, unappropriated',
+       industries = c('information',
+                      'professional, scientific, and technical services',
+                      'health care and social assistance',
+                      'arts, entertainment, and recreation', NOT_ALLOCABLE)),
+  list(id = 'table_05_1', year = 2007,
+       item = 'net short-term capital gain less net long-term loss',
+       industries = c('information', 'accommodation and food services')),
+  # the two residual columns again, on the pair of net items where their loss
+  # shows: flipping both moves each sum by 64,726 against gaps of 64,725 and
+  # 64,727, where the vintages either side close to a single unit
+  list(id = 'table_05_1', year = 2007,
+       item = 'total receipts less total deductions',
+       industries = NOT_ALLOCABLE),
+  list(id = 'table_05_1', year = 2007,
+       item = 'net income (less deficit)', industries = NOT_ALLOCABLE),
+
+  list(id = 'table_05_2', year = 2007,
+       item = 'retained earnings, unappropriated',
+       industries = c('health care and social assistance',
+                      'wholesale and retail trade not allocable')),
+  list(id = 'table_05_2', year = 2007,
+       item = 'net short-term capital gain less net long-term loss',
+       industries = c('information', 'accommodation and food services')),
+
+  list(id = 'table_05_4', year = 2008,
+       item = 'retained earnings, unappropriated',
+       industries = c('information',
+                      'professional, scientific, and technical services',
+                      'health care and social assistance'))
 )
 
-restore_ty2007_signs = function(panel, id) {
-  for (item in names(TY2007_UNSIGNED[[id]])) {
-    industries = TY2007_UNSIGNED[[id]][[item]]
-    hit = panel$tax_year == 2007 & panel$item == item &
-      panel$industry %in% industries
-    if (sum(hit) != length(industries)) {
-      stop(sprintf('%s TY2007 sign repair: expected %d cells of "%s", found %d',
-                   id, length(industries), item, sum(hit)))
+restore_stripped_signs = function(panel, id) {
+  for (spec in UNSIGNED_CELLS) {
+    if (spec$id != id) next
+    hit = panel$tax_year == spec$year & panel$item == spec$item &
+      panel$industry %in% spec$industries
+    if (sum(hit) != length(spec$industries)) {
+      stop(sprintf('%s TY%d sign repair: expected %d cells of "%s", found %d',
+                   id, spec$year, length(spec$industries), spec$item, sum(hit)))
     }
     if (any(panel$value[hit] <= 0, na.rm = TRUE)) {
-      stop(sprintf('%s TY2007 sign repair: "%s" is not published unsigned',
-                   id, item))
+      stop(sprintf('%s TY%d sign repair: "%s" is not published unsigned',
+                   id, spec$year, spec$item))
     }
     panel$value[hit] = -panel$value[hit]
-    message(sprintf('  TY2007: restored the minus sign on %d %s cells',
-                    length(industries), item))
+    message(sprintf('  TY%d: restored the minus sign on %d %s cells',
+                    spec$year, length(spec$industries), spec$item))
   }
   panel
 }
@@ -530,7 +565,7 @@ build_t1 = function(measure) {
 }
 
 message('table_01 (estimates)')
-panel = restore_ty2007_signs(build_t1('estimate'), 'table_01')
+panel = restore_stripped_signs(build_t1('estimate'), 'table_01')
 report_sums('table_01', panel)
 check_every_year('table_01', panel)
 
@@ -586,21 +621,42 @@ write_panel('table_01', panel)
 write_panel('table_01_cv', cv_panel)
 
 #=============================================================================
-# Table 5.1 -- the full item stub in the ROWS, industries in the COLUMNS
+# Tables 5.1-5.4 -- the full item stub in the ROWS, industries in the COLUMNS
 #=============================================================================
 
-#-----------------------------------
-# Where Table 5.1 lives, by vintage
-#-----------------------------------
+# The 5.x family publishes one table per universe of returns, all four with
+# the same item stub and the same industry columns, so one spec list drives
+# them. 5.3/5.4 exclude the pass-throughs and regulated forms that 5.1/5.2
+# include, which is why 5.3 <= 5.1 and 5.4 <= 5.2 return for return.
+T5_SPECS = list(
+  list(id = 'table_05_1', old = '06', old_suffix = 'nr',
+       universe = 'all active corporations'),
+  list(id = 'table_05_2', old = '07', old_suffix = 'nr',
+       universe = 'returns with net income'),
+  list(id = 'table_05_3', old = '12', old_suffix = 'mi',
+       universe = 'active corporations other than 1120S, 1120-REIT, 1120-RIC'),
+  list(id = 'table_05_4', old = '13', old_suffix = 'mi',
+       universe = 'returns with net income, other than 1120S, 1120-REIT, 1120-RIC')
+)
 
-t51_file = function(year) {
+#-------------------------------------
+# Where the 5.x files live, by vintage
+#-------------------------------------
+
+# Archive filenames carry a per-table suffix that changes at the 2004
+# switch to 'ccr': Tables 6 and 7 are '{yy}co06nr.xls'/'{yy}co07nr.xls'
+# before it, Tables 12 and 13 '{yy}co12mi.xls'/'{yy}co13mi.xls'. TY1999
+# ships the latter two with UPPERCASE .XLS, so the lookup is
+# case-insensitive. The exact-match pattern also keeps the 1120S companion
+# files ('{yy}co06s.xls', published 2006-2013) out of the way -- those are a
+# different population and belong to the Tier 2 roadmap.
+t5_file = function(spec, year) {
   if (year >= 2014) {
-    return(sprintf('modern/table_05_1/table_05_1_%d.xlsx', year))
+    return(sprintf('modern/%s/%s_%d.xlsx', spec$id, spec$id, year))
   }
-  yy = sprintf('%02d', year %% 100)
-  if (year >= 2004) return(archive_file(year, sprintf('^%sco06ccr\\.xls$', yy),
-                                        'table 5.1'))
-  archive_file(year, sprintf('^%sco06nr\\.xls$', yy), 'table 5.1')
+  suffix = if (year >= 2004) 'ccr' else spec$old_suffix
+  archive_file(year, sprintf('^%sco%s%s\\.xls$', sprintf('%02d', year %% 100),
+                             spec$old, suffix), spec$id)
 }
 
 #-------------------------------------------------
@@ -686,10 +742,11 @@ column_industry = function(col_label) {
 # SOI breaks a long item name over two stub lines and puts the data on the
 # SECOND, so extract_sheet reads the first line as a section header
 # ("Mortgages, notes, and bonds payable in less" + "than one year"). Every
-# section header this table produces, in all 25 vintages, is such a wrap, so
-# the row directly below one is glued back onto it -- which reproduces the
-# published label and lets ITEM_ALIASES harmonize it like any other.
-t51_row_items = function(df) {
+# section header these tables produce, across all four and all 25 vintages,
+# is such a wrap, so the row directly below one is glued back onto it -- which
+# reproduces the published label and lets ITEM_ALIASES harmonize it like any
+# other.
+t5_row_items = function(df) {
   rows = unique(df[, c('row_seq', 'section', 'row_label')])
   rows = rows[order(rows$row_seq), ]
   prev = c(NA_character_, head(rows$section, -1))
@@ -703,8 +760,8 @@ t51_row_items = function(df) {
 # Parse one vintage
 #--------------------
 
-t51_extract = function(year) {
-  path = file.path(dest, t51_file(year))
+t5_extract = function(spec, year) {
+  path = file.path(dest, t5_file(spec, year))
   if (!file.exists(path)) {
     stop('missing input (run download_irs_corp.R first): ', path)
   }
@@ -726,7 +783,7 @@ t51_extract = function(year) {
 
   keep = df[df$col_seq %in% named$col_seq, ]
   keep$industry = named$industry[match(keep$col_seq, named$col_seq)]
-  items = t51_row_items(df)
+  items = t5_row_items(df)
   keep$item = items$item[match(keep$row_seq, items$row_seq)]
   if (anyDuplicated(keep[, c('industry', 'item')])) {
     dup = keep[duplicated(keep[, c('industry', 'item')]), ][1, ]
@@ -742,44 +799,88 @@ t51_extract = function(year) {
              row.names = NULL, stringsAsFactors = FALSE)
 }
 
-message('table_05_1 (balance sheet, income statement and tax by industry)')
-t51 = do.call(rbind, lapply(INDUSTRY_YEARS, function(year) {
-  p = t51_extract(year)
-  message(sprintf('  %d: %3d industries x %2d items = %4d cells  [%s]',
-                  year, length(unique(p$industry)), length(unique(p$item)),
-                  nrow(p), basename(t51_file(year))))
-  p
-}))
-t51 = restore_ty2007_signs(t51, 'table_05_1')
-report_sums('table_05_1', t51)
-check_every_year('table_05_1', t51)
-
-# Table 5.1 and Table 1 estimate several of the same quantities for the same
-# industries, from the same sample, so the overlap is a free cross-check on
-# both -- and on the sector columns picked above, which Table 1 arrives at by
-# an unrelated route (row labels, not column headers).
-T51_VS_T1 = c('number of returns' = 'number of returns',
-              'total receipts'    = 'total receipts',
-              'business receipts' = 'business receipts',
-              'cost of goods sold'= 'cost of goods sold',
-              'income subject to tax' = 'income subject to tax',
-              'total income tax before credits' = 'total income tax before credits',
-              'total income tax after credits'  = 'total income tax after credits')
-overlap = merge(
-  transform(t51[t51$item %in% names(T51_VS_T1), ],
-            item = unname(T51_VS_T1[item]), t51 = value)[
-              , c('tax_year', 'industry', 'item', 't51')],
-  transform(panel, t1 = value)[, c('tax_year', 'industry', 'item', 't1')],
-  by = c('tax_year', 'industry', 'item'))
-ok = !is.na(overlap$t51) & !is.na(overlap$t1) & overlap$t1 != 0
-overlap$rel = abs(overlap$t51 - overlap$t1) / abs(overlap$t1)
-worst = overlap[ok, ][order(-overlap$rel[ok]), ][1, ]
-if (worst$rel > 1e-3) {
-  stop(sprintf('table_05_1 disagrees with table_01: %d %s %s -- %.0f vs %.0f (%.2f%%)',
-               worst$tax_year, worst$industry, worst$item, worst$t51,
-               worst$t1, 100 * worst$rel))
+t5 = list()
+for (spec in T5_SPECS) {
+  message(sprintf('%s (%s)', spec$id, spec$universe))
+  p = do.call(rbind, lapply(INDUSTRY_YEARS, function(year) {
+    q = t5_extract(spec, year)
+    message(sprintf('  %d: %3d industries x %2d items = %4d cells  [%s]',
+                    year, length(unique(q$industry)), length(unique(q$item)),
+                    nrow(q), basename(t5_file(spec, year))))
+    q
+  }))
+  p = restore_stripped_signs(p, spec$id)
+  report_sums(spec$id, p)
+  check_every_year(spec$id, p)
+  t5[[spec$id]] = p
 }
-message(sprintf('table_05_1 vs table_01: %d shared cells agree, worst relative gap %.2e (%d %s %s)',
-                sum(ok), worst$rel, worst$tax_year, worst$industry, worst$item))
 
-write_panel('table_05_1', t51)
+#---------------------------------------------------
+# Cross-checks: the 5.x family against Table 1, and
+# against each other
+#---------------------------------------------------
+
+# 5.1 and 5.2 estimate quantities Table 1 also publishes, for the same
+# industries and from the same sample, but reach them by an unrelated route --
+# Table 1 reads them off row labels, the 5.x off column headers -- so the
+# overlap tests the sector columns picked above. 5.1 covers all active
+# corporations, which is Table 1's own universe; 5.2 covers returns with net
+# income, which Table 1 carries as its two "with net income" columns.
+T5_VS_T1 = list(
+  table_05_1 = c('number of returns' = 'number of returns',
+                 'total receipts'    = 'total receipts',
+                 'business receipts' = 'business receipts',
+                 'cost of goods sold'= 'cost of goods sold',
+                 'income subject to tax' = 'income subject to tax',
+                 'total income tax before credits' = 'total income tax before credits',
+                 'total income tax after credits'  = 'total income tax after credits'),
+  table_05_2 = c('number of returns' = 'number of returns with net income',
+                 'total receipts' = 'total receipts of returns with net income')
+)
+for (id in names(T5_VS_T1)) {
+  map = T5_VS_T1[[id]]
+  p = t5[[id]]
+  overlap = merge(
+    transform(p[p$item %in% names(map), ],
+              item = unname(map[item]), t5 = value)[
+                , c('tax_year', 'industry', 'item', 't5')],
+    transform(panel, t1 = value)[, c('tax_year', 'industry', 'item', 't1')],
+    by = c('tax_year', 'industry', 'item'))
+  ok = !is.na(overlap$t5) & !is.na(overlap$t1) & overlap$t1 != 0
+  overlap$rel = abs(overlap$t5 - overlap$t1) / abs(overlap$t1)
+  worst = overlap[ok, ][order(-overlap$rel[ok]), ][1, ]
+  if (worst$rel > 1e-3) {
+    stop(sprintf('%s disagrees with table_01: %d %s %s -- %.0f vs %.0f (%.2f%%)',
+                 id, worst$tax_year, worst$industry, worst$item, worst$t5,
+                 worst$t1, 100 * worst$rel))
+  }
+  message(sprintf('%s vs table_01: %d shared cells agree, worst relative gap %.2e (%d %s %s)',
+                  id, sum(ok), worst$rel, worst$tax_year, worst$industry,
+                  worst$item))
+}
+
+# Nesting: each universe is a subset of the ones above it, so its return count
+# can never exceed theirs. This is the only check that reaches 5.3 and 5.4,
+# which have no Table 1 counterpart -- and it is a real one, since a
+# mis-assigned sector column would show up as one industry's count jumping
+# above its own superset.
+T5_NESTED = list(c('table_05_2', 'table_05_1'), c('table_05_3', 'table_05_1'),
+                 c('table_05_4', 'table_05_2'), c('table_05_4', 'table_05_3'))
+for (pair in T5_NESTED) {
+  returns = function(p) {
+    q = p[p$item == 'number of returns', ]
+    setNames(q$value, paste(q$tax_year, q$industry))
+  }
+  n_sub = returns(t5[[pair[1]]])
+  n_sup = returns(t5[[pair[2]]])[names(n_sub)]
+  bad = which(!is.na(n_sub) & !is.na(n_sup) & n_sub > n_sup)
+  if (length(bad) > 0) {
+    stop(sprintf('%s has more returns than %s: %s, %.0f vs %.0f',
+                 pair[1], pair[2], names(n_sub)[bad[1]],
+                 n_sub[bad[1]], n_sup[bad[1]]))
+  }
+  message(sprintf('%s nests inside %s: %d industry-years, all counts within',
+                  pair[1], pair[2], sum(!is.na(n_sub) & !is.na(n_sup))))
+}
+
+for (spec in T5_SPECS) write_panel(spec$id, t5[[spec$id]])

@@ -25,11 +25,11 @@ page][archive] · [SOI's 2014 table-number crosswalk][xwalk] (mirrored at
 | `aligned/modern/{table_id}.csv`, all 26 tables | 2014–2022 | generic long panels + `_coverage.csv` label-drift report |
 | `aligned/table_01.csv` | 1998–2022 | Table 1 ← old Table 1, **sector level** ([industry_tables.md](industry_tables.md)) |
 | `aligned/table_01_cv.csv` | 1998–2022 | Table 1 CV ← old Table 1 CV, same shape |
-| `aligned/table_05_1.csv` | 1998–2022 | Table 5.1 ← old Table 6, sector level — items × industry **columns** |
+| `aligned/table_05_{1,2,3,4}.csv` | 1998–2022 | Tables 5.1–5.4 ← old 6, 7, 12, 13, sector level — items × industry **columns** |
 
 Everything alignable by pure text-label matching is done, and the industry
 tables are aligned at sector level in both orientations — rows (Table 1) and
-columns (Table 5.1). The remaining work is tiered by what blocks it.
+columns (the whole 5.x family). The remaining work is tiered by what blocks it.
 
 ## Tier 1 — industry tables, NAICS era (1998 → present). The big prize.
 
@@ -44,8 +44,7 @@ mid-panel in Table 5.1).
 |---|---|---|---|
 | [Table 1][pub16] (`{yy}co01ccr.xlsx`) | old 1 (`{yy}co01ccr.xls` 2004+, `{yy}co01nr.xls` 98–03) | industry rows × item cols | **DONE at sector level** → `aligned/table_01.csv` |
 | [Table 1 CV][pub16] (`{yy}co01cvccr.xlsx`) | old 1cv (`{yy}co01cv.xls`) | same | **DONE at sector level** → `aligned/table_01_cv.csv` |
-| [Table 5.1][pub16] (`{yy}co51ccr.xlsx`) | old 6 (`{yy}co06ccr.xls` 2004+, `{yy}co06nr.xls` 98–03) | items × industry cols | **DONE at sector level** → `aligned/table_05_1.csv` |
-| [Tables 5.2–5.4][pub16] (`{yy}co52–54ccr.xlsx`) | old 7, 12, 13 | items × industry cols | same shape and machinery as 5.1; item stubs already aliased |
+| [Tables 5.1–5.4][pub16] (`{yy}co51–54ccr.xlsx`) | old 6, 7 (`{yy}co0Xnr.xls` 98–03), old 12, 13 (`{yy}co1Xmi.xls` 98–03), all `{yy}coXXccr.xls` 2004+ | items × industry cols | **DONE at sector level** → `aligned/table_05_{1,2,3,4}.csv` |
 
 Two levels of ambition:
 
@@ -181,8 +180,14 @@ Notes from the survey:
    above, and — via the Table 1 cross-check it now runs — the discovery that
    **TY2007 was published with its minus signs stripped**, which had been
    sitting unnoticed inside Table 1's net worth row.
-4. **Tables 5.2–5.4** — the same machinery, a different universe per table;
-   cheapest remaining industry work now that 5.1 has paid the setup cost.
+4. ~~**Tables 5.2–5.4**~~ — **done 2026-08** (`aligned/table_05_2.csv`,
+   `table_05_3.csv`, `table_05_4.csv`). As expected once 5.1 had paid the
+   setup cost, this was mostly turning the 5.1 code into a four-entry spec
+   list. It bought a nesting check (each universe's return count cannot exceed
+   its superset's — the only check reaching 5.3/5.4, which have no Table 1
+   counterpart), a second Table 1 cross-check via 5.2 against Table 1's "with
+   net income" columns, and one more stripped-sign file, `08co13ccr.xls`,
+   which showed the defect is per file rather than per vintage.
 5. **1120S set** (2004/2006–2022) and Tables 10/11/12 at sector level.
 6. **Minor-industry concordance** only when a downstream consumer actually
    needs sub-sector detail.

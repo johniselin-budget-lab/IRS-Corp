@@ -153,8 +153,7 @@ From SOI's crosswalk (docs/table_crosswalk_2014.pdf), with why:
 | Modern | Old | Blocker |
 |---|---|---|
 | 1, 1cv | 1, 1cv | **aligned at SECTOR level 1998–2022** (`align_industry.R`); minor-industry detail still needs a concordance |
-| 5.1 | 6 | **aligned at SECTOR level 1998–2022**; same remaining blocker |
-| 5.2/5.3/5.4 | 7/12/13 | columns are industries; 5.1's machinery applies directly |
+| 5.1/5.2/5.3/5.4 | 6/7/12/13 | **aligned at SECTOR level 1998–2022**; same remaining blocker |
 | 6.1/6.2, 7, 8, 9, 3.2 | 1120S tables 7/8, 1, 5, 6, 4 | the `{yy}co0Xs.xls` 1120S files appear in the zips only for later years; industry dimension for 6.x/7 |
 | 10, 11, 12 | 10, 20, 26 | industry/sector dimension |
 | 2.4 | Corporation Source Book 3 | source book not part of this archive |

@@ -187,26 +187,49 @@ Observed CV range across the panel: −230.90 to 691.25. Large values are real �
 SOI prints them for thin cells, e.g. net worth of the not-allocable rows — so
 the range assertion is deliberately loose and about structure, not statistics.
 
-## `aligned/table_05_1.csv` — Table 5.1 at sector level, 1998–2022
+## `aligned/table_05_{1,2,3,4}.csv` — the 5.x family at sector level, 1998–2022
 
-Same schema as `table_01.csv`, so the two join on `(tax_year, industry)` and
-the three panels share one set of industry names. 38,746 cells: 22 industries
-× 74–79 items in 1998–2013, 20 × 68–69 from 2014. Where Table 1 puts
-industries in its rows and a short headline item list in its columns, Table
-5.1 transposes it — the full balance-sheet and income-statement stub in the
-rows, industries across the columns — so the same `align_industry.R` matches
-the sector list against the column headers instead of the stub.
+Same schema as `table_01.csv`, so every panel joins on `(tax_year, industry)`
+and they all share one set of industry names. Where Table 1 puts industries in
+its rows and a short headline item list in its columns, the 5.x family
+transposes it — the full balance-sheet and income-statement stub in the rows,
+industries across the columns — so `align_industry.R` matches the sector list
+against the column headers instead of the stub.
 
+The four differ only in which returns they cover, which is why one spec list
+drives all of them:
+
+| Panel | Old table | Universe | Cells | Items (all 25 years) |
+|---|---|---|---|---|
+| `table_05_1.csv` | 6 | all active corporations | 38,746 | 85 (63) |
+| `table_05_2.csv` | 7 | returns with net income | 38,606 | 87 (60) |
+| `table_05_3.csv` | 12 | active corporations other than Forms 1120S, 1120-REIT, 1120-RIC | 38,606 | 88 (60) |
+| `table_05_4.csv` | 13 | returns with net income, same exclusion | 38,606 | 87 (60) |
+
+Each is 22 industries × 74–79 items in 1998–2013 and 20 × 68–69 from 2014.
 Both cuts carry over unchanged: sector level (the ~240 minor-industry columns
 drift at every NAICS revision) and a 1998 start (1994–97 are SIC).
 
+**Archive filenames carry a per-table suffix** that changes at the 2004 switch
+to `ccr`: old 6 and 7 are `{yy}co06nr.xls` / `{yy}co07nr.xls` before it, old 12
+and 13 are `{yy}co12mi.xls` / `{yy}co13mi.xls` (TY1999 ships both UPPERCASE).
+The exact-match lookup also keeps the 1120S companions `{yy}co06s.xls` /
+`{yy}co07s.xls` (published 2006–2013) out of the way — a different population,
+on the Tier 2 roadmap.
+
+Reading the series in one line: 5.3's return count *falls* from 2.25M (1998)
+to 1.56M (2022) while 5.1's rises from 4.85M to 6.85M — the S-corporation
+share of corporate returns growing, which is what makes the 5.1/5.3 split
+worth carrying.
+
 ### Items are text labels, and reuse the 2.x alias set
 
-Unlike Table 1's positional columns, Table 5.1's rows are the same
-balance-sheet / income-statement stub published in Tables 2, 3 and 5, so they
-harmonize through the shared `ITEM_ALIASES` in `alignment_helpers.R` (moved
-there from `align_tables.R` when this panel started using it). 85 items
-appear across the span; **63 span all 25 years**. What does not:
+Unlike Table 1's positional columns, the 5.x rows are the same balance-sheet /
+income-statement stub published in Tables 2, 3 and 5, so they harmonize
+through the shared `ITEM_ALIASES` in `alignment_helpers.R` (moved there from
+`align_tables.R` when these panels started using it). Taking 5.1 as the
+example — 85 items across the span, **63 in all 25 years** — what does not
+span it:
 
 - `net worth, total`, `dividends`, `tax-exempt interest` — 2014 onwards only;
   the pre-2014 table has no net-worth line and splits dividends into domestic
@@ -223,9 +246,9 @@ Two label traps, both handled by machinery rather than by ad-hoc aliases:
 - **Wrapped stubs.** SOI breaks a long item over two stub lines and puts the
   data on the second, so `extract_sheet` reads the first as a section header
   ("Mortgages, notes, and bonds payable in less" + "than one year"). Every
-  section header this table produces in all 25 vintages is such a wrap, so the
-  row directly below one is glued back onto it, which reproduces the published
-  label exactly and lets the existing aliases do the rest.
+  section header these tables produce — all four, all 25 vintages — is such a
+  wrap, so the row directly below one is glued back onto it, which reproduces
+  the published label exactly and lets the existing aliases do the rest.
 - **Footnote lists.** TY2018 writes "Total deductions [1,2]";
   `normalize_label` now strips comma-separated footnote refs, not just single
   ones.
@@ -255,12 +278,26 @@ each for a era the one before cannot read:
 Aggregates are excluded by omission, exactly as in Table 1: "Wholesale and
 retail trade" has a column of its own and is not in `SECTORS`.
 
-### TY2007 is published without its minus signs
+### Four published files carry no minus signs
 
-`07co06ccr.xls` holds **6 negative cells** where the vintages either side hold
-46 (TY2006) and 68 (TY2008) — SOI typeset the file with minus signs stripped
-from part of the body. The affected cells are pinned down by identities, not
-inferred, and each closes to rounding once restored:
+Some SOI files were typeset with minus signs stripped from part of the body,
+which shows as a count of negative cells far below what the vintages either
+side carry. Four are affected, and they are the *only* four across the whole
+1998–2022 span of these six panels:
+
+| File | Table, tax year | Negative cells | Neighbouring vintages |
+|---|---|---|---|
+| `07co01ccr.xls` | 1, TY2007 | — | net worth row only |
+| `07co06ccr.xls` | 6 → 5.1, TY2007 | 6 | 46 (TY2006), 68 (TY2008) |
+| `07co07ccr.xls` | 7 → 5.2, TY2007 | — | same two items as Table 6 |
+| `08co13ccr.xls` | 13 → 5.4, **TY2008** | 6 | 24 (TY2007), 17 (TY2009) |
+
+Table 12 → 5.3 is clean throughout, and so is every other vintage.
+
+The affected cells are pinned down by identities, not inferred. Every entry in
+`UNSIGNED_CELLS` is both (a) the **only** set of cells whose restoration makes
+that item's sector detail add to its total — searched over all subsets up to
+six industries, to the nearest thousand — and (b) corroborated independently:
 
 - Table 5.1's equity build-up (capital stock + additional paid-in capital +
   retained earnings appropriated + unappropriated − cost of treasury stock)
@@ -269,10 +306,9 @@ inferred, and each closes to rounding once restored:
   each time by *exactly twice* that industry's retained earnings,
   unappropriated. Restoring those six takes the sector-detail gap on that item
   from **15.4% to 9e-10**.
-- The only pair of TY2007 cells whose restoration likewise closes net
-  short-term capital gain — the one other item failing outright — is
-  information and accommodation and food services (**4.6% → 1.1e-08**); no
-  other subset closes it.
+- The net short-term capital gain item names the **same two industries** in
+  Tables 6 and 7 independently (4.6% → 1.1e-08, and 4.8% → exactly zero), and
+  TY2007 is the one year in the span where either is published positive.
 - The two not-allocable residual columns are stripped again on `total
   receipts less total deductions` and `net income (less deficit)`: flipping
   both moves each sum by 64,726 against gaps of 64,725 and 64,727, where every
@@ -282,31 +318,42 @@ inferred, and each closes to rounding once restored:
   in that panel; restoring the two closes it to 3e-11 and drops the panel's
   worst gap to 2.36e-06 (TY2001 U.S. possessions tax credit, three units of
   rounding on $1.27 billion).
+- Table 13's three TY2008 industries are negative in TY2006, TY2007 and
+  TY2009 and positive only in TY2008; restored, the sum closes to 2.9e-10.
 
 Only the sign is wrong — every magnitude is confirmed by the identity it sits
-in — so the cells are restored rather than dropped, and both panels assert
-afterwards that their sums close.
+in — so the cells are restored rather than dropped, and every panel asserts
+afterwards that its sums close.
 
-### What verifies the panel
+### What verifies the panels
 
-- **Sector sums**: detail + residuals = all-industries for every year × item,
-  1,706 combinations, worst relative gap **2.36e-06**. A gap now has to clear
-  both a relative and an absolute floor: one unit of the published rounding is
-  1e-4 of a small item like TY1999 recapture taxes ($9.8 million), which would
-  otherwise fail on nothing at all.
-- **Against Table 1**: the two tables estimate seven of the same quantities
-  for the same industries from the same sample, but reach them by unrelated
-  routes — row labels in one, column headers in the other. All **3,596**
-  shared cells agree; the worst gap is 4.28e-05 and is Table 1's fractional
-  return counts (2014 utilities, 6,695.71 against 6,696).
-- **Seams** smooth at 2003/04, 2006/07 and 2013/14; all-industries total
+- **Sector sums**: detail + residuals = all-industries for every year × item —
+  1,706 / 1,570 / 1,495 / 1,404 combinations across 5.1–5.4, worst relative
+  gap **2.36e-06** in the first three and 4.95e-06 in 5.4 (TY2011 return
+  counts, about 17 returns in 3.5 million). A gap has to clear both a relative
+  and an absolute floor: one unit of the published rounding is 1e-4 of a small
+  item like TY1999 recapture taxes ($9.8 million), which would otherwise fail
+  on nothing at all.
+- **Against Table 1**: Table 1 and the 5.x reach the same quantities by
+  unrelated routes — row labels in one, column headers in the other. 5.1
+  shares seven items with Table 1's own universe (**3,596** cells, worst
+  4.28e-05) and 5.2 matches Table 1's two "with net income" columns (**1,038**
+  cells, worst 4.91e-06). Both worst cases are Table 1's fractional return
+  counts (2014 utilities, 6,695.71 against 6,696).
+- **Nesting**: each universe is a subset of the ones above it, so its return
+  count can never exceed theirs — checked for 5.2 ⊆ 5.1, 5.3 ⊆ 5.1, 5.4 ⊆ 5.2
+  and 5.4 ⊆ 5.3 over ~530 industry-years each. This is the only check that
+  reaches 5.3 and 5.4, which have no Table 1 counterpart, and a mis-assigned
+  sector column would show as one industry's count jumping above its superset.
+- **Seams** smooth at 2003/04, 2006/07 and 2013/14; 5.1's all-industries total
   assets run $37.3T (1998) → $143.3T (2022), and `additional paid-in capital`
   reproduces the `table_02_1` series year for year.
 
 ## Next increments
 
-- **Tables 5.2–5.4** (← old 7, 12, 13): the same shape as 5.1 and the same
-  column machinery; 5.2 is returns with net income, 5.3/5.4 the S-corporation
-  and other splits. The item stub is the one already aliased here.
 - **1120S set and Tables 10/11/12** at sector level, per
-  [alignment_plan.md](alignment_plan.md) Tier 2.
+  [alignment_plan.md](alignment_plan.md) Tier 2. Tables 6.1/6.2 and 7 are the
+  1120S counterparts of the 5.x and should take the same spec-list treatment;
+  their archive files (`{yy}co06s.xls`, `{yy}co07s.xls`) exist only for
+  2006–2013, so they buy a shorter history.
+- **Minor-industry concordance**, the one remaining blocker on all of these.
