@@ -4,8 +4,8 @@ Downloader for an organized mirror of the IRS SOI **Corporation Complete
 Report (Publication 16)** basic tables, plus aligned cross-year panels:
 1994–2022 for Tables 4, 2.1, 2.2, and 3.1, 1998–2022 for Tables 1 (with its
 coefficients of variation) and 5.1–5.4 at NAICS sector level, 2004/2006–2022
-for the Form 1120S industry tables (6.1, 6.2, 7, 8), and 2014–2022 generic
-panels for every basic table (see `aligned/` in the layout below):
+for the whole Form 1120S set (6.1, 6.2, 7, 8 by industry; 3.2 and 9 by class),
+and 2014–2022 generic panels for every basic table (see `aligned/` below):
 
 - 2014+ (xlsx per table):
   https://www.irs.gov/statistics/soi-tax-stats-corporation-income-tax-returns-complete-report-publication-16
@@ -26,8 +26,8 @@ Rscript download_irs_corp.R 2014 2023              # custom year range
 Rscript download_irs_corp.R --dest /path/to/store  # separate destination
 
 Rscript align_table4.R --dest /path/to/store       # build aligned/table_4.csv
-Rscript align_tables.R --dest /path/to/store       # modern + size-class panels
 Rscript align_industry.R --dest /path/to/store     # industry panels (1, 1 CV, 5.1-5.4, 6.1, 6.2, 7, 8)
+Rscript align_tables.R --dest /path/to/store       # modern + class panels (2.1, 2.2, 3.1, 3.2, 9)
 ```
 
 Budget Lab internal users: the canonical shared destination (already
@@ -66,9 +66,12 @@ docs/               table_crosswalk_2014.pdf   SOI's old->new table-number map
                                      ~3 years earlier)
 aligned/            table_4.csv      harmonized Table 4 panel, 1994-2022
                                      (written by align_table4.R)
-                    table_02_1.csv   deep panels 1994-2022: Table 2.1 (old 2),
-                    table_02_2.csv   2.2 (old 3), 3.1 (old 5) -- items x size
-                    table_03_1.csv   classes (written by align_tables.R)
+                    table_02_1.csv   class panels (align_tables.R): items x
+                    table_02_2.csv   size classes for Tables 2.1 (old 2), 2.2
+                    table_03_1.csv   (old 3) and 3.1 (old 5), 1994-2022; then
+                    table_03_2.csv   Form 1120S by receipt size (old 1120S 4)
+                    table_09.csv     and by number of shareholders (old 1120S
+                                     6), both 2004-2022
                     table_01.csv     industry panels at NAICS SECTOR level,
                     table_01_cv.csv  1998-2022 (align_industry.R): Table 1
                     table_05_1.csv   and its coefficients of variation, then

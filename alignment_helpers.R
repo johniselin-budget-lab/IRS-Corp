@@ -91,9 +91,16 @@ find_numrow = function(m, max_scan = 30) {
     v = suppressWarnings(as.numeric(gsub('^\\((.*)\\)$', '\\1', m[i, ])))
     idx = which(!is.na(v))
     if (length(idx) < 5) next
-    run = numrow_run(v[idx])
-    if (!is.null(run) && run[1] >= 1 && run[1] < 100) {
-      return(list(row = i, cols = idx, vals = run))
+    # a stray print page number can sit in the stub ahead of the run -- the
+    # TY2004 1120S Table 4 sheet opens this row with "221" -- so let the run
+    # start a cell or two in, but only once it has failed to start at the first
+    for (skip in 0:2) {
+      cols = idx[seq_len(length(idx) - skip) + skip]
+      if (length(cols) < 5) break
+      run = numrow_run(v[cols])
+      if (!is.null(run) && run[1] >= 1 && run[1] < 100) {
+        return(list(row = i, cols = cols, vals = run))
+      }
     }
   }
   NULL
@@ -422,6 +429,64 @@ apply_alias = function(label) {
 }
 
 #-------------------------------------
+# The Form 1120S stub
+#-------------------------------------
+
+# Renames confined to the 1120S stub, applied after the shared ITEM_ALIASES.
+# They stay separate rather than joining the table above because two of them
+# collide with the corporate stub: "dividends" is the modern 5.x receipts
+# line, and "depreciation" a deduction in every corporate table.
+#   * 2004-2013 write the capital-gain and rental lines longhand, the modern
+#     files shorten them and swap the rental word order;
+#   * TY2007's files substitute "0" for the hyphen throughout the stub
+#     ("net short0term", "pension, profit0sharing");
+#   * TY2006-2012 misspells "business" in the net income line.
+S_ITEM_ALIASES = c(
+  'net short-term capital gain (less loss)' = 'net short-term capital gain (loss)',
+  'net long-term capital gain (less loss)'  = 'net long-term capital gain (loss)',
+  'net short0term capital gain (less loss)' = 'net short-term capital gain (loss)',
+  'net long0term capital gain (less loss)'  = 'net long-term capital gain (loss)',
+  'pension, profit0sharing, stock, annuity' = 'pension, profit-sharing, etc., plans',
+  'royalty income'                          = 'gross royalties',
+  'dividends'                               = 'dividend income',
+  'rental real estate net income (less deficit)' =
+    'real estate rental net income (less deficit)',
+  'depreciation from form 4562'             = 'depreciation',
+  'net gain (loss) from sales of business property' =
+    'net gain (less loss) sales of business property',
+  'net income from a trade or buisness'     = 'net income from a trade or business'
+)
+
+apply_s_alias = function(item) {
+  hit = item %in% names(S_ITEM_ALIASES)
+  item[hit] = unname(S_ITEM_ALIASES[item[hit]])
+  item
+}
+
+# The 1120S stub prints a net figure and then its two halves on rows labelled
+# with nothing but the halves' generic names, and the SAME two words recur
+# under several parents -- old 1120S Table 1 prints "Net income" and "Deficit"
+# four times over, under the trade-or-business, real-estate-rental,
+# other-rental and total net income figures. A split row takes its parent's
+# name, the nearest row above it that is not itself a split.
+#
+# This is 1120S-only. In the corporate stub a bare "Net income" row is an item
+# in its own right -- Tables 5.2 and 5.4 cover returns WITH net income, so they
+# publish it as a line rather than as half of a net figure.
+SPLIT_LABELS = c('net income', 'deficit', 'income', 'gain', 'loss')
+
+qualify_splits = function(item) {
+  split = item %in% SPLIT_LABELS
+  if (!any(split)) return(item)
+  parent = item
+  parent[split] = NA_character_
+  for (i in which(split)) if (i > 1) parent[i] = parent[i - 1]
+  if (anyNA(parent[split])) stop('split item row with no parent above it')
+  item[split] = paste0(parent[split], ': ', item[split])
+  item
+}
+
+#-------------------------------------
 # Size-class column normalization
 #-------------------------------------
 
@@ -460,6 +525,36 @@ parse_class_header = function(hdr, span_phrases) {
     return(list(col_type = 'size_class', lo = num(mm[2]), hi = NA_real_))
   }
   NULL   # not a recognizable class column -- caller decides what to do
+}
+
+# The same job for a column classified by a COUNT rather than a money amount:
+# 1120S Table 6 / modern Table 9 break returns out by number of shareholders,
+# heading the columns "Total", "1", "2", "3", "4-10", "11-20", "21-30" and
+# "31 or more" (TY2013 and earlier: "31 or greater"). Ranges are inclusive on
+# both ends, so a single number is the class lo == hi, and the open top class
+# has hi = NA -- the same shape parse_class_header returns.
+parse_count_header = function(hdr, span_phrases) {
+  h = tolower(hdr)
+  for (p in span_phrases) h = sub(p, '', h, fixed = TRUE)
+  h = gsub('\\[[0-9]+\\]', '', h)
+  h = gsub('[–—]', '-', h)          # en/em dash -> hyphen
+  h = trimws(gsub('\\s+', ' ', h))
+  if (h %in% c('total', 'total returns')) {
+    return(list(col_type = 'total', lo = NA_real_, hi = NA_real_))
+  }
+  mm = regmatches(h, regexec('^([0-9]+)\\s*-\\s*([0-9]+)$', h))[[1]]
+  if (length(mm) == 3) {
+    return(list(col_type = 'count_class', lo = as.numeric(mm[2]),
+                hi = as.numeric(mm[3])))
+  }
+  mm = regmatches(h, regexec('^([0-9]+) or (more|greater)$', h))[[1]]
+  if (length(mm) == 3) {
+    return(list(col_type = 'count_class', lo = as.numeric(mm[2]), hi = NA_real_))
+  }
+  if (grepl('^[0-9]+$', h)) {
+    return(list(col_type = 'count_class', lo = as.numeric(h), hi = as.numeric(h)))
+  }
+  NULL
 }
 
 #-------------------------------------------------

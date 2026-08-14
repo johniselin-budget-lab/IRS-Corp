@@ -34,17 +34,25 @@ Tables 1/1cv), `pct` for 2.1A/2.4A, `cv_pct` for Table 1 part 2, else
 (e.g. "[2]" = rounds to zero in 2.1A) and `blank` for empty cells in
 otherwise-data rows.
 
-## 2. Deep panels — 1994–2022 for the size-class pairs
+## 2. Deep panels — the class-dimension pairs
 
-`aligned/table_02_1.csv`, `aligned/table_02_2.csv`, `aligned/table_03_1.csv`:
-`tax_year, item, col_type (total | zero_assets | size_class), size_class,
-class_lo, class_hi, value, flag, unit`.
+`tax_year, item, col_type (total | zero_assets | size_class | count_class),
+size_class, class_lo, class_hi, value, flag, unit`.
 
-| Panel | Modern table | Old table (1994–2013) | Classifier |
-|---|---|---|---|
-| table_02_1 | 2.1 all active corps | 2 | size of total assets |
-| table_02_2 | 2.2 returns with net income | 3 | size of total assets |
-| table_03_1 | 3.1 selected items | 5 (All-Industries block) | size of business receipts |
+| Panel | Modern table | Old table | Classifier | Years |
+|---|---|---|---|---|
+| table_02_1 | 2.1 all active corps | 2 | size of total assets | 1994–2022 |
+| table_02_2 | 2.2 returns with net income | 3 | size of total assets | 1994–2022 |
+| table_03_1 | 3.1 selected items | 5 (All-Industries block) | size of business receipts | 1994–2022 |
+| table_03_2 | 3.2 Form 1120S | 1120S 4 (All-Industries block) | size of business receipts | 2004–2022 |
+| table_09 | 9 Form 1120S | 1120S 6 | number of shareholders | 2004–2022 |
+
+The last two lose TY2005 and TY2008, which the archive zips do not carry —
+see [industry_tables.md](industry_tables.md) for the 1120S file map and for
+the TY2007/TY2009 files published without minus signs. `count_class` columns
+(1, 2, 3, 4–10, 11–20, 21–30, 31 or more) are parsed by `parse_count_header`
+and labelled as the published range rather than as dollars; their `class_lo`
+and `class_hi` are inclusive on both ends.
 
 Mechanics and gotchas:
 
@@ -88,6 +96,21 @@ Mechanics and gotchas:
   and net income are smooth across 1997/98, 2003/04, and 2013/14; Table 2.1
   and 3.1 totals agree exactly (same population), Table 2.2 is the
   with-net-income subset.
+- **Class detail must add to the total column** in every year × item —
+  2,244 / 2,204 / 983 / 639 / 674 testable combinations across the five
+  panels. Years whose classes OVERLAP are skipped, because their parts are not
+  a partition: 1994–2003 Table 5 publishes an "Under $100,000" subtotal beside
+  its own finer sub-classes. A gap must clear a relative floor (1e-4) and an
+  absolute one: measured over the 3,227 combinations in table_02_1 and
+  table_03_1 the gap never exceeds THREE units and its median is one, so the
+  floor is five — just above the rounding ceiling, far below any structural
+  error. Every panel now passes with no gap above it.
+- **The two 1120S class panels are cross-checked against `table_07`**, which
+  `align_industry.R` builds from a different file by a different route: their
+  total columns agree with its all-industries column on number of returns and
+  number of shareholders over all 17 years, to 5e-08 or exactly. Run
+  `align_industry.R` first to enable that check; it is skipped with a message
+  if the industry panel is not there yet.
 
 ## Industry-dimension machinery (the Tier 1 engine prerequisite, done 2026-08)
 

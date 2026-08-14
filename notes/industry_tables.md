@@ -456,11 +456,24 @@ ordinary rounding seen in every other year, but worth knowing about.
   estimates, so it carries both their roundings and is allowed a few returns
   of slack.
 
+### The other two 1120S tables live in `align_tables.R`
+
+Tables 3.2 and 9 complete the set but are classified by size of business
+receipts and by number of shareholders rather than by industry, so they are
+class panels — see [modern_tables.md](modern_tables.md#2-deep-panels--the-class-dimension-pairs).
+They share this family's file map, item aliases and split rows (all in
+`alignment_helpers.R`), and the same TY2007/TY2009 unsigned-file problem: with
+a dozen size classes and nothing to corroborate them, an item that fails to
+reconcile there is withdrawn rather than reconstructed. Eight such items in
+Table 3.2 and one in Table 9.
+
+Their total columns are cross-checked against `table_07`'s all-industries
+column — the same universe reached through a different file by a different
+script — and agree over all 17 years to 5e-08 or exactly.
+
 ## Next increments
 
-- **Tables 3.2 and 9**, the two remaining 1120S tables, are classified by size
-  of business receipts and by number of shareholders rather than by industry,
-  so they belong with the deep panels in `align_tables.R`.
 - **Tables 10/11/12** at sector level, per
-  [alignment_plan.md](alignment_plan.md) Tier 2.
+  [alignment_plan.md](alignment_plan.md) Tier 2. Modest tables with sector
+  columns; the `T5_SPECS` list is the obvious home.
 - **Minor-industry concordance**, the one remaining blocker on all of these.

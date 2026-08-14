@@ -728,58 +728,33 @@ write_panel('table_01_cv', cv_panel)
 # and regulated forms 5.1/5.2 include, which is why 5.3 <= 5.1 and 5.4 <= 5.2
 # return for return. The 1120S set covers the S corporations 5.3/5.4 leave
 # out, and its old files are far patchier -- see t5_file below.
-# Renames confined to the 1120S stub, applied after the shared ITEM_ALIASES.
-# They stay here rather than in alignment_helpers.R because two of them
-# collide with the corporate stub: "dividends" is the modern 5.x receipts
-# line, and "depreciation" a deduction in every corporate table.
-#   * 2004-2013 write the capital-gain and rental lines longhand, the modern
-#     files shorten them and swap the rental word order;
-#   * TY2007's files substitute "0" for the hyphen throughout the stub
-#     ("net short0term", "pension, profit0sharing");
-#   * TY2006-2012 Table 8 misspells "business" in the net income line.
-S_ITEM_ALIASES = c(
-  'net short-term capital gain (less loss)' = 'net short-term capital gain (loss)',
-  'net long-term capital gain (less loss)'  = 'net long-term capital gain (loss)',
-  'net short0term capital gain (less loss)' = 'net short-term capital gain (loss)',
-  'net long0term capital gain (less loss)'  = 'net long-term capital gain (loss)',
-  'pension, profit0sharing, stock, annuity' = 'pension, profit-sharing, etc., plans',
-  'royalty income'                          = 'gross royalties',
-  'dividends'                               = 'dividend income',
-  'rental real estate net income (less deficit)' =
-    'real estate rental net income (less deficit)',
-  'depreciation from form 4562'             = 'depreciation',
-  'net gain (loss) from sales of business property' =
-    'net gain (less loss) sales of business property',
-  'net income from a trade or buisness'     = 'net income from a trade or business'
-)
-
 T5_SPECS = list(
   list(id = 'table_05_1', form = 'ccr', old = '06', old_suffix = 'nr',
-       years = 1998:2022, wrapped_stubs = TRUE, split_rows = FALSE,
+       years = 1998:2022, wrapped_stubs = TRUE, s_stub = FALSE,
        universe = 'all active corporations'),
   list(id = 'table_05_2', form = 'ccr', old = '07', old_suffix = 'nr',
-       years = 1998:2022, wrapped_stubs = TRUE, split_rows = FALSE,
+       years = 1998:2022, wrapped_stubs = TRUE, s_stub = FALSE,
        universe = 'returns with net income'),
   list(id = 'table_05_3', form = 'ccr', old = '12', old_suffix = 'mi',
-       years = 1998:2022, wrapped_stubs = TRUE, split_rows = FALSE,
+       years = 1998:2022, wrapped_stubs = TRUE, s_stub = FALSE,
        universe = 'active corporations other than 1120S, 1120-REIT, 1120-RIC'),
   list(id = 'table_05_4', form = 'ccr', old = '13', old_suffix = 'mi',
-       years = 1998:2022, wrapped_stubs = TRUE, split_rows = FALSE,
+       years = 1998:2022, wrapped_stubs = TRUE, s_stub = FALSE,
        universe = 'returns with net income, other than 1120S, 1120-REIT, 1120-RIC'),
 
   list(id = 'table_06_1', form = '1120s', old = '07', years = 2006:2022,
-       wrapped_stubs = FALSE, split_rows = TRUE, item_aliases = S_ITEM_ALIASES,
+       wrapped_stubs = FALSE, s_stub = TRUE,
        universe = 'Form 1120S, active corporations -- balance sheet'),
   list(id = 'table_06_2', form = '1120s', old = '08', years = 2006:2022,
-       wrapped_stubs = FALSE, split_rows = TRUE, item_aliases = S_ITEM_ALIASES,
+       wrapped_stubs = FALSE, s_stub = TRUE,
        universe = 'Form 1120S, returns with net income -- balance sheet'),
   list(id = 'table_07', form = '1120s', old = '01',
        years = c(2004, 2006:2007, 2009:2022),
-       wrapped_stubs = FALSE, split_rows = TRUE, item_aliases = S_ITEM_ALIASES,
+       wrapped_stubs = FALSE, s_stub = TRUE,
        universe = 'Form 1120S, active corporations -- income'),
   list(id = 'table_08', form = '1120s', old = '05',
        years = c(2004, 2006:2007, 2009:2022),
-       wrapped_stubs = FALSE, split_rows = TRUE, item_aliases = S_ITEM_ALIASES,
+       wrapped_stubs = FALSE, s_stub = TRUE,
        universe = 'Form 1120S, rental real estate (Form 8825)')
 )
 
@@ -901,18 +876,6 @@ column_industry = function(col_label) {
 # Which row is which item
 #-------------------------------------------------
 
-# In the 1120S stub a net figure is followed by its two halves on rows
-# labelled with nothing but the halves' generic names, and the SAME two words
-# recur under several parents -- old 1120S Table 1 prints "Net income" and
-# "Deficit" four times over, under the trade-or-business, real-estate-rental,
-# other-rental and total net income figures. A split row there takes its
-# parent's name, the nearest row above it that is not itself a split.
-#
-# This is 1120S-only (spec$split_rows). In the 5.x family a bare "Net income"
-# row is an item in its own right -- Tables 5.2 and 5.4 cover returns WITH net
-# income, so they publish it as a line rather than as half of a net figure.
-SPLIT_LABELS = c('net income', 'deficit', 'income', 'gain', 'loss')
-
 # SOI also breaks a long item name over two stub lines and puts the data on
 # the SECOND, so extract_sheet reads the first line as a section header
 # ("Mortgages, notes, and bonds payable in less" + "than one year"). Whether a
@@ -933,21 +896,9 @@ t5_row_items = function(df, spec) {
     !is.na(rows$section) & (is.na(prev) | rows$section != prev)
   item = apply_alias(ifelse(wrapped, paste(rows$section, rows$row_label),
                             rows$row_label))
-  if (!is.null(spec$item_aliases)) {
-    hit = item %in% names(spec$item_aliases)
-    item[hit] = unname(spec$item_aliases[item[hit]])
-  }
-  split = spec$split_rows & item %in% SPLIT_LABELS
-  if (any(split)) {
-    parent = item
-    parent[split] = NA_character_
-    # carry the last non-split item forward over the splits beneath it
-    for (i in which(split)) {
-      if (i > 1) parent[i] = parent[i - 1]
-    }
-    if (anyNA(parent[split])) stop('split item row with no parent above it')
-    item[split] = paste0(parent[split], ': ', item[split])
-  }
+  # the 1120S stub carries its own renames and its split rows (see
+  # alignment_helpers.R); the corporate stub has neither
+  if (spec$s_stub) item = qualify_splits(apply_s_alias(item))
   rows$item = item
   rows[, c('row_seq', 'item')]
 }
