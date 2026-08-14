@@ -26,6 +26,8 @@ page][archive] · [SOI's 2014 table-number crosswalk][xwalk] (mirrored at
 | `aligned/table_01.csv` | 1998–2022 | Table 1 ← old Table 1, **sector level** ([industry_tables.md](industry_tables.md)) |
 | `aligned/table_01_cv.csv` | 1998–2022 | Table 1 CV ← old Table 1 CV, same shape |
 | `aligned/table_05_{1,2,3,4}.csv` | 1998–2022 | Tables 5.1–5.4 ← old 6, 7, 12, 13, sector level — items × industry **columns** |
+| `aligned/table_06_1.csv`, `table_06_2.csv` | 2006–2022 | Form 1120S balance sheet ← old 1120S 7, 8, sector level |
+| `aligned/table_07.csv`, `table_08.csv` | 2004–2022 | Form 1120S income and rental real estate ← old 1120S 1, 5 |
 
 Everything alignable by pure text-label matching is done, and the industry
 tables are aligned at sector level in both orientations — rows (Table 1) and
@@ -78,17 +80,22 @@ the rest −8..−92).
 
 ## Tier 2 — shallower history, engine-ready
 
-**1120S family.** The `{yy}co0Xs.xls` files exist in the archive zips only
-for **2004 and 2006–2013** (2005 absent; 2008 has just 2 of 7), so backward
-extension buys ~9 patchy years:
+**1120S family.** Three naming schemes and two gaps, established by
+inventory: `{yy}co1120s{NN}.xls` in TY2004 (1120S Tables 1, 2, 4, 5, 6 only),
+**nothing at all in TY2005**, and `{yy}co{NN}s.xls` for TY2006–2013 with
+TY2008 shipping only Tables 7 and 8. So the balance-sheet pair runs 2006–2022
+unbroken and the rest lose 2005 and 2008:
 
-| Modern | Old 1120S table | Classifier | Difficulty |
+| Modern | Old 1120S table | Classifier | Status |
 |---|---|---|---|
-| [Table 7][pub16] | 1120S table 1 | major industry | industry dimension (Tier 1 machinery) |
-| [Table 8][pub16] | 1120S table 5 | sector × asset size | label-stable, easy |
-| [Table 9][pub16] | 1120S table 6 | number of shareholders | label-stable, easy |
-| [Table 3.2][pub16] | 1120S table 4 | receipt size | size classes — same as 3.1 treatment |
-| [Tables 6.1/6.2][pub16] | 1120S tables 7/8 | major industry | industry dimension |
+| [Tables 6.1/6.2][pub16] | 1120S tables 7, 8 | major industry (balance sheet) | **DONE**, 2006–2022 |
+| [Table 7][pub16] | 1120S table 1 | major industry (income) | **DONE**, 2004–2022 |
+| [Table 8][pub16] | 1120S table 5 | sector (rental real estate, Form 8825) | **DONE**, 2004–2022 |
+| [Table 3.2][pub16] | 1120S table 4 | size of business receipts, sectioned by sector | size classes — the 3.1 treatment, in `align_tables.R` |
+| [Table 9][pub16] | 1120S table 6 | number of shareholders | count classes (1, 2, 3, 4–10, …), a new class type |
+
+Old 1120S table 2 (returns with net income, income items) has no modern
+successor and is not aligned.
 
 **Sector-column tables.** [Table 10][pub16] ← old 10 (1120-F), [Table
 11][pub16] ← old 20 (dividends), [Table 12][pub16] ← old 26 (COGS): modest
@@ -188,7 +195,12 @@ Notes from the survey:
    counterpart), a second Table 1 cross-check via 5.2 against Table 1's "with
    net income" columns, and one more stripped-sign file, `08co13ccr.xls`,
    which showed the defect is per file rather than per vintage.
-5. **1120S set** (2004/2006–2022) and Tables 10/11/12 at sector level.
+5. **1120S set** — the four industry-dimension tables are **done 2026-08**
+   (`table_06_1`, `table_06_2`, `table_07`, `table_08`); they are four more
+   entries in the same spec list, with their own file map, per-table spans and
+   two stub conventions. Tables **3.2 and 9** remain: classified by size of
+   business receipts and by number of shareholders, so they belong with the
+   deep panels in `align_tables.R`. Then **Tables 10/11/12** at sector level.
 6. **Minor-industry concordance** only when a downstream consumer actually
    needs sub-sector detail.
 7. **Partnership repo** (proposal above) can start any time — the

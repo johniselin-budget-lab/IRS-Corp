@@ -3,8 +3,9 @@
 Downloader for an organized mirror of the IRS SOI **Corporation Complete
 Report (Publication 16)** basic tables, plus aligned cross-year panels:
 1994–2022 for Tables 4, 2.1, 2.2, and 3.1, 1998–2022 for Tables 1 (with its
-coefficients of variation) and 5.1–5.4 at NAICS sector level, and 2014–2022
-generic panels for every basic table (see `aligned/` in the layout below):
+coefficients of variation) and 5.1–5.4 at NAICS sector level, 2004/2006–2022
+for the Form 1120S industry tables (6.1, 6.2, 7, 8), and 2014–2022 generic
+panels for every basic table (see `aligned/` in the layout below):
 
 - 2014+ (xlsx per table):
   https://www.irs.gov/statistics/soi-tax-stats-corporation-income-tax-returns-complete-report-publication-16
@@ -26,7 +27,7 @@ Rscript download_irs_corp.R --dest /path/to/store  # separate destination
 
 Rscript align_table4.R --dest /path/to/store       # build aligned/table_4.csv
 Rscript align_tables.R --dest /path/to/store       # modern + size-class panels
-Rscript align_industry.R --dest /path/to/store     # industry panels (Tables 1, 1 CV, 5.1-5.4)
+Rscript align_industry.R --dest /path/to/store     # industry panels (1, 1 CV, 5.1-5.4, 6.1, 6.2, 7, 8)
 ```
 
 Budget Lab internal users: the canonical shared destination (already
@@ -75,9 +76,13 @@ aligned/            table_4.csv      harmonized Table 4 panel, 1994-2022
                     table_05_3.csv   stub by sector for each of the four 5.x
                     table_05_4.csv   universes (all active corporations;
                                      returns with net income; each again
-                                     excluding Forms 1120S/1120-REIT/1120-RIC).
-                                     All six share one schema and join on
-                                     (tax_year, industry)
+                                     excluding Forms 1120S/1120-REIT/1120-RIC),
+                    table_06_1.csv   then the Form 1120S industry tables --
+                    table_06_2.csv   balance sheet for active corporations and
+                    table_07.csv     for returns with net income (2006-2022),
+                    table_08.csv     income (2004-2022) and rental real estate
+                                     (2004-2022). All ten share one schema and
+                                     join on (tax_year, industry)
     modern/         {table_id}.csv   every basic table 2014-2022, generic
                                      long format keyed on published labels,
                                      with industry-hierarchy columns

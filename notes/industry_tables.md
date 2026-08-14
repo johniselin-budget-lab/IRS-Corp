@@ -349,11 +349,118 @@ afterwards that its sums close.
   assets run $37.3T (1998) → $143.3T (2022), and `additional paid-in capital`
   reproduces the `table_02_1` series year for year.
 
+## `aligned/table_0{6_1,6_2,7,8}.csv` — the 1120S industry panels
+
+The S corporations that Tables 5.3/5.4 leave out, in the same schema and the
+same sector names, so they join the corporate panels on `(tax_year,
+industry)`. Same machinery: these are four more entries in the `T5_SPECS`
+list, differing only in file map, span and two stub conventions.
+
+| Panel | Old 1120S table | Universe | Span | Cells | Items |
+|---|---|---|---|---|---|
+| `table_06_1.csv` | 7 | active corporations, balance sheet | 2006–2022 | 20,644 | 63 |
+| `table_06_2.csv` | 8 | returns with net income, balance sheet | 2006–2022 | 20,292 | 60 |
+| `table_07.csv` | 1 | active corporations, income | 2004–2022 | 9,664 | 45 |
+| `table_08.csv` | 5 | rental real estate (Form 8825) | 2004–2022 | 7,770 | 25 |
+
+Old 1120S Table 2 (returns with net income, income items) has no modern
+successor and is not aligned.
+
+### The archive files are their own scheme, and gappier
+
+| Years | Naming | Which tables |
+|---|---|---|
+| TY2004 | `{yy}co1120s{NN}.xls` | 1120S Tables 1, 2, 4, 5, 6 only |
+| TY2005 | — | **nothing**: that year's zip omits the 1120S set entirely (and Tables 14/15 with it) |
+| TY2006–2013 | `{yy}co{NN}s.xls` | all seven, **except TY2008**, which ships only Tables 7 and 8 |
+
+So the two balance-sheet panels run 2006–2022 unbroken while the other two
+lose 2005 and 2008 — hence the per-spec `years`. (The standing plan previously
+recorded this as "2004 and 2006–2013, 2005 absent, 2008 has 2 of 7"; the 2004
+files are there but under the third naming scheme, and 2004 has no Tables 7/8.)
+
+### Two stub conventions differ from the 5.x family
+
+Both are per-family flags on the spec, each enumerated across every vintage
+rather than assumed:
+
+- **`wrapped_stubs = FALSE`.** In the 5.x family every section header is a
+  wrapped item. The 1120S files produce only two section headers ever —
+  "Income from trade or business" and "Total receipts" — and both are real
+  *groupings* over the rows beneath. Gluing there would invent an item and
+  split its series in two.
+- **`split_rows = TRUE`.** The 1120S stub prints a net figure and then its two
+  halves on rows labelled with nothing but the halves' generic names, and the
+  same two words recur under four different parents in old Table 1 ("Net
+  income" and "Deficit" under trade-or-business, real-estate-rental,
+  other-rental and total). A split row therefore takes its parent's name:
+  `total net income (less deficit): deficit`. This is off for the 5.x family,
+  where a bare "Net income" row is an item in its own right — Tables 5.2 and
+  5.4 cover returns *with* net income and publish it as a line.
+
+A small alias table (`S_ITEM_ALIASES`) stays local to these four rather than
+joining the shared `ITEM_ALIASES`, because two of its keys collide with the
+corporate stub: "dividends" is the modern 5.x receipts line and "depreciation"
+a deduction everywhere. It also absorbs TY2007's habit of substituting `0` for
+the hyphen throughout the stub ("net short0term", "pension, profit0sharing").
+
+### TY2007 and TY2009 are stripped wholesale, and are handled differently
+
+Where the corporate files lost a handful of minus signs, **every 1120S file
+for TY2007 and TY2009 lost all of them** — each of the four holds zero
+negative values where the vintages around it hold 5 to 78. That changes what
+can be recovered, so the treatment is split:
+
+- The sector identity is still a valid instrument, because a 1120S item's
+  *all-industries* total is virtually never negative — 5 such cells in the
+  entire set outside those two years. So an item that reconciles had no sector
+  cell stripped, and one that does not is repaired when the flip set is
+  unique. Eight repairs qualify; both rental entries are confirmed twice over,
+  since 1120S Tables 1 and 5 publish the same rental line and point
+  independently at the same industries.
+- The exceptions are the two items whose own total *does* go negative
+  elsewhere — `net short-term capital gain (loss)` in Table 7 and `net gain
+  (less loss) sales of business property` in Table 8. There the total is as
+  suspect as the detail, the identity cannot pin anything down, and no unique
+  flip set exists. Those are **withheld**.
+
+Cells that cannot be repaired are withdrawn rather than guessed at: value
+`NA`, flag `unreconciled`. The full list, with what makes each irreparable, is
+`WITHHELD_CELLS` in `align_industry.R` — the two items above for TY2007/2009,
+one TY2007 item with two equally good flip sets, one TY2013 split whose detail
+falls *short* of its total (the wrong direction for a lost sign, unexplained),
+and TY2021 `total income tax` in Table 6.2, where SOI left a computed row in
+the sheet carrying floating-point noise (all industries 27,054,644.399995599)
+and negative sector values a tax total cannot have.
+
+Everything not withheld in TY2007/TY2009 is carried as published. Two items
+there retain a 2.6e-05 discrepancy — within the tolerance and within the
+ordinary rounding seen in every other year, but worth knowing about.
+
+### What verifies these panels
+
+- **Sector sums** as everywhere else: 740 / 596 / 381 / 216 year × item
+  combinations, worst relative gap 2.66e-05 (TY2007, the unsigned vintage),
+  8.70e-06, 2.66e-05 and 3.12e-06.
+- **Tables 7 and 6.1 classify the same universe** — one its income, the other
+  its balance sheet — so where they publish the same item they must agree to
+  the digit. `number of returns` (330 cells) and `number of shareholders` (150
+  cells) agree **exactly**. That is the sharpest check available here, since
+  these panels have no Table 1 counterpart.
+- **Nesting**: 6.2 ⊆ 6.1 and 8 ⊆ 7 by return count, 352 industry-years each.
+- **Across the two families**: the S corporations are part of what Table 5.3
+  leaves out of Table 5.1, so their return count cannot exceed the difference
+  (which also carries the 1120-REIT and 1120-RIC filers). It holds over 354
+  industry-years, overshooting by a single return in TY2006 retail trade —
+  this compares a count against a difference of two separately published
+  estimates, so it carries both their roundings and is allowed a few returns
+  of slack.
+
 ## Next increments
 
-- **1120S set and Tables 10/11/12** at sector level, per
-  [alignment_plan.md](alignment_plan.md) Tier 2. Tables 6.1/6.2 and 7 are the
-  1120S counterparts of the 5.x and should take the same spec-list treatment;
-  their archive files (`{yy}co06s.xls`, `{yy}co07s.xls`) exist only for
-  2006–2013, so they buy a shorter history.
+- **Tables 3.2 and 9**, the two remaining 1120S tables, are classified by size
+  of business receipts and by number of shareholders rather than by industry,
+  so they belong with the deep panels in `align_tables.R`.
+- **Tables 10/11/12** at sector level, per
+  [alignment_plan.md](alignment_plan.md) Tier 2.
 - **Minor-industry concordance**, the one remaining blocker on all of these.
