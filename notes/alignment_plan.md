@@ -29,6 +29,7 @@ page][archive] · [SOI's 2014 table-number crosswalk][xwalk] (mirrored at
 | `aligned/table_06_1.csv`, `table_06_2.csv` | 2006–2022 | Form 1120S balance sheet ← old 1120S 7, 8, sector level |
 | `aligned/table_07.csv`, `table_08.csv` | 2004–2022 | Form 1120S income and rental real estate ← old 1120S 1, 5 |
 | `aligned/table_03_2.csv`, `table_09.csv` | 2004–2022 | Form 1120S by receipt size and by shareholder count ← old 1120S 4, 6 |
+| `aligned/table_1{0,1,2}.csv` | 1998–2022 | sector-column tables ← old 10 (1120-F), 20 (dividends/tax), 26 (COGS) |
 
 Everything alignable by pure text-label matching is done, and the industry
 tables are aligned at sector level in both orientations — rows (Table 1) and
@@ -98,9 +99,14 @@ unbroken and the rest lose 2005 and 2008:
 Old 1120S table 2 (returns with net income, income items) has no modern
 successor and is not aligned.
 
-**Sector-column tables.** [Table 10][pub16] ← old 10 (1120-F), [Table
-11][pub16] ← old 20 (dividends), [Table 12][pub16] ← old 26 (COGS): modest
-tables, sector columns — cheap at sector level alongside Tier 1.
+**Sector-column tables** — **DONE 2026-08**, 1998–2022. [Table 10][pub16] ←
+old 10 (`{yy}co10is.xls` 98–03, 1120-F), [Table 11][pub16] ← old 20
+(`{yy}co20ti.xls`, dividends and tax items), [Table 12][pub16] ← old 26
+(`{yy}co26ss.xls`, COGS). All three are published "by SELECTED sectors": no
+not-allocable column, so the sum check does not apply, and Table 10 omits
+sectors outright early on (12 of 19 in TY2000). They are checked against the
+panels whose quantities they restate instead — see
+[industry_tables.md](industry_tables.md).
 
 ## Tier 3 — blocked on data or a scoping decision
 
@@ -204,10 +210,14 @@ Notes from the survey:
    (`table_03_2`, `table_09`) went to `align_tables.R`, which gained per-spec
    years, a count-class parser and — long overdue, from Tier 4 below — a
    class-sum-vs-total check on every deep panel.
-6. **Tables 10/11/12** at sector level: modest tables, sector columns, and the
-   `align_industry.R` spec list is now the obvious home.
+6. ~~**Tables 10/11/12** at sector level~~ — **done 2026-08**. Three more
+   entries in the spec list, but they forced the stub resolver to tell a
+   WRAP from a SCOPE from structural NOISE, and added a duplicate-label
+   qualifier and paginated-header collapse that every panel now inherits.
+   With these, **every basic table with an industry dimension is aligned at
+   sector level.**
 7. **Minor-industry concordance** only when a downstream consumer actually
-   needs sub-sector detail.
+   needs sub-sector detail. This is now the only thing left in Tier 1.
 8. **Partnership repo** (proposal above) can start any time — the
    downloader + entity-type and asset-size panels don't depend on the
    corporate tiers; its industry tables should wait for whatever NAICS

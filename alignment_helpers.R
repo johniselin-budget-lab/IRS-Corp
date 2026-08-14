@@ -475,6 +475,24 @@ apply_s_alias = function(item) {
 # publish it as a line rather than as half of a net figure.
 SPLIT_LABELS = c('net income', 'deficit', 'income', 'gain', 'loss')
 
+# A stub can repeat a child label under two different parents -- Table 20
+# lists "Less-than-20%-owned subject to 70% deduction" under both "Dividends
+# received from domestic corporations, total" and its foreign twin. Where a
+# label repeats within one sheet, each occurrence takes the nearest preceding
+# label that does NOT repeat, which is its parent. Rows are in published
+# order. A no-op on a stub whose labels are already unique.
+qualify_duplicates = function(item) {
+  repeated = item %in% item[duplicated(item)]
+  if (!any(repeated)) return(item)
+  parent = ifelse(repeated, NA_character_, item)
+  for (i in seq_along(item)) {
+    if (is.na(parent[i]) && i > 1) parent[i] = parent[i - 1]
+  }
+  if (anyNA(parent[repeated])) stop('repeated item row with no parent above it')
+  item[repeated] = paste0(parent[repeated], ': ', item[repeated])
+  item
+}
+
 qualify_splits = function(item) {
   split = item %in% SPLIT_LABELS
   if (!any(split)) return(item)

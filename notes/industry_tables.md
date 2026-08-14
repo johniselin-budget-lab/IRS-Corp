@@ -471,9 +471,81 @@ Their total columns are cross-checked against `table_07`'s all-industries
 column — the same universe reached through a different file by a different
 script — and agree over all 17 years to 5e-08 or exactly.
 
+## `aligned/table_1{0,1,2}.csv` — the sector-column tables, 1998–2022
+
+| Panel | Old table | What it carries | Cells | Items |
+|---|---|---|---|---|
+| `table_10.csv` | 10 | Form 1120-F: income statement and tax of foreign corporations with U.S. business | 19,467 | 63 |
+| `table_11.csv` | 20 | dividends, special deductions and every type of tax | 29,300 | 150 |
+| `table_12.csv` | 26 | Form 1125-A cost of goods sold | 9,840 | 22 |
+
+Archive names add three more suffixes before the 2004 switch to `ccr`:
+`{yy}co10is.xls`, `{yy}co20ti.xls`, `{yy}co26ss.xls` (TY1999 Table 26 is
+uppercase). All three run the full 1998–2022 span.
+
+### "By selected sectors" changes what can be checked
+
+Unlike every panel above, these three carry **no not-allocable column**, so
+their sectors do not partition the total and the sum check does not apply. And
+Table 10 — Form 1120-F is a small population — omits sectors outright in the
+early years: 12 of 19 in TY2000, rising to all 19 by TY2013. `sectors =
+'selected'` on the spec declares both, dropping the sum check and the
+all-19 requirement (only the all-sectors column is then required) and logging
+the per-year count instead.
+
+What replaces the sum check is sharper than it was: Tables 11 and 12 restate
+quantities Tables 1, 5.1 and 5.2 also publish, reached from a different file
+by a different route, so every shared cell has to match.
+
+- `table_11` vs `table_01` — **1,610** cells: income subject to tax and both
+  income-tax totals agree **exactly**; the worst gap of 4.45e-05 is Table 1's
+  fractional return counts.
+- `table_12` vs `table_05_1` — **1,000** cells, cost of goods sold **exact**.
+- `table_12` vs `table_05_2` — **486** cells, worst 1.21e-10.
+- `table_10` has no counterpart (1120-F is its own universe), so the check is
+  containment: no sector holds more 1120-F returns than it holds returns
+  altogether. 444 industry-years, no violations.
+
+### A stub line can mean three different things
+
+`extract_sheet` turns any stub line carrying no data into a `section`, but SOI
+uses such a line for three purposes, and these tables are the first to need
+all three. Each is declared per spec and was enumerated across every vintage:
+
+- **wrap** — a long name broken over two lines with the data on the second.
+  All six of Table 10's sections are these, as is every section in the 5.x
+  family.
+- **scope** — a heading that qualifies every row beneath it, and must, because
+  the rows repeat. Table 12 prints its ten items twice, under "Returns with
+  and without net income" and "Returns with net income"; Table 11 prints
+  "Income tax" once as a return count under "Number of returns with—" and
+  again as an amount. Those rows take the scope as a prefix, giving items like
+  `returns with net income: cost of goods sold`.
+- **noise** — structure naming nothing the panel needs, but still a scope
+  *boundary*. Table 11's "Returns with and without net income" and "Total
+  income tax after—" are these: the modern Table 11 drops them entirely, so
+  prefixing would break every one of those series at 2014 — while letting the
+  preceding scope run past them would qualify the rest of the sheet with it.
+
+Two more stub rules earn their place here and apply everywhere:
+
+- `qualify_duplicates` — a label that still repeats within one sheet takes the
+  nearest preceding label that does not. Table 20 lists "Less-than-20%-owned
+  subject to 70% deduction" under both the domestic and the foreign dividend
+  totals; each becomes `<parent>: <label>`. A no-op on a stub whose labels are
+  already unique, which is every other panel.
+- A **paginated** sheet repeats its header block, so one column can arrive
+  with two spellings ("Selected sectors Manufacturing" on the first page,
+  "Selected sectors--continued Manufacturing" on the next). Columns are
+  collapsed to one row each, and the spellings must agree on what the column
+  is.
+
+`block_key` also strips a leading "Sector" or "Selected sectors", which is how
+these three label the whole industry band rather than each block, and step (2)
+of the column search no longer insists on the word "Total" — TY1998 Table 26
+heads its wholesale column with nothing but the aggregate name and its own.
+
 ## Next increments
 
-- **Tables 10/11/12** at sector level, per
-  [alignment_plan.md](alignment_plan.md) Tier 2. Modest tables with sector
-  columns; the `T5_SPECS` list is the obvious home.
 - **Minor-industry concordance**, the one remaining blocker on all of these.
+  Every basic table with an industry dimension is now aligned at sector level.

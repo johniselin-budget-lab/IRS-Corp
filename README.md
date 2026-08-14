@@ -5,7 +5,8 @@ Report (Publication 16)** basic tables, plus aligned cross-year panels:
 1994–2022 for Tables 4, 2.1, 2.2, and 3.1, 1998–2022 for Tables 1 (with its
 coefficients of variation) and 5.1–5.4 at NAICS sector level, 2004/2006–2022
 for the whole Form 1120S set (6.1, 6.2, 7, 8 by industry; 3.2 and 9 by class),
-and 2014–2022 generic panels for every basic table (see `aligned/` below):
+1998–2022 for the sector-column Tables 10, 11 and 12, and 2014–2022 generic
+panels for every basic table (see `aligned/` below):
 
 - 2014+ (xlsx per table):
   https://www.irs.gov/statistics/soi-tax-stats-corporation-income-tax-returns-complete-report-publication-16
@@ -26,7 +27,7 @@ Rscript download_irs_corp.R 2014 2023              # custom year range
 Rscript download_irs_corp.R --dest /path/to/store  # separate destination
 
 Rscript align_table4.R --dest /path/to/store       # build aligned/table_4.csv
-Rscript align_industry.R --dest /path/to/store     # industry panels (1, 1 CV, 5.1-5.4, 6.1, 6.2, 7, 8)
+Rscript align_industry.R --dest /path/to/store     # industry panels (1, 1 CV, 5.1-5.4, 6.x, 7, 8, 10-12)
 Rscript align_tables.R --dest /path/to/store       # modern + class panels (2.1, 2.2, 3.1, 3.2, 9)
 ```
 
@@ -84,8 +85,12 @@ aligned/            table_4.csv      harmonized Table 4 panel, 1994-2022
                     table_06_2.csv   balance sheet for active corporations and
                     table_07.csv     for returns with net income (2006-2022),
                     table_08.csv     income (2004-2022) and rental real estate
-                                     (2004-2022). All ten share one schema and
-                                     join on (tax_year, industry)
+                    table_10.csv     (2004-2022); then the sector-column
+                    table_11.csv     tables, 1998-2022: Form 1120-F (old 10),
+                    table_12.csv     dividends and tax items (old 20) and cost
+                                     of goods sold (old 26). All thirteen
+                                     share one schema and join on
+                                     (tax_year, industry)
     modern/         {table_id}.csv   every basic table 2014-2022, generic
                                      long format keyed on published labels,
                                      with industry-hierarchy columns

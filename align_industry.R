@@ -24,6 +24,9 @@
 #   aligned/table_06_2.csv    Form 1120S, net income -- balance sheet 2006-2022
 #   aligned/table_07.csv      Form 1120S, active -- income           2004-2022
 #   aligned/table_08.csv      Form 1120S, rental real estate         2004-2022
+#   aligned/table_10.csv      Form 1120-F, foreign corporations      1998-2022
+#   aligned/table_11.csv      dividends and tax items                1998-2022
+#   aligned/table_12.csv      cost of goods sold (Form 1125-A)       1998-2022
 #     tax_year, row_type (all_industries | sector | not_allocable),
 #     industry, item, value, flag, unit
 #   Every panel shares that schema and the same canonical industry names, so
@@ -48,7 +51,10 @@
 # sectors in supersectors in 1998-99, indents Utilities differently from its
 # siblings, and drops stub indentation entirely from 2017 on), and merged-cell
 # spanners do not exist before 2003. Every year must yield all 19 sectors or
-# the run fails.
+# the run fails -- except in the three tables published "by SELECTED sectors"
+# (10, 11, 12), which omit sectors outright in some vintages and carry no
+# not-allocable column, so they are checked against the panels whose
+# quantities they restate instead of against their own totals.
 #
 # Usage:
 #   Rscript align_industry.R [--dest /path/to/store]
@@ -126,6 +132,7 @@ INDUSTRY_ALIASES = c(
   'wholesale and retail not allocable' =
     'wholesale and retail trade not allocable',
   'all industries' = ALL_INDUSTRIES,
+  'all sectors' = ALL_INDUSTRIES,
   'accomodation and food services' = 'accommodation and food services'
 )
 
@@ -399,11 +406,19 @@ report_sums = function(label, panel, abs_tol = 2) {
 
 # All-industries and every sector present in every year (the residual rows are
 # published for part of the span only, so they are not required)
-check_every_year = function(label, panel, years) {
+check_every_year = function(label, panel, years, sectors = 'all') {
   by_industry = table(unique(panel[, c('tax_year', 'industry')])$industry)
   n_full = sum(by_industry == length(years))
-  if (n_full < 1 + length(SECTORS)) {
+  # a "selected sectors" table omits sectors outright in some vintages, so
+  # only the all-industries column is guaranteed
+  wanted = if (sectors == 'selected') 1 else 1 + length(SECTORS)
+  if (n_full < wanted) {
     stop(label, ': an industry is missing from at least one year')
+  }
+  if (sectors == 'selected') {
+    per_year = table(unique(panel[, c('tax_year', 'industry')])$tax_year)
+    message(sprintf('%s: %d-%d industries published per year (of %d)', label,
+                    min(per_year), max(per_year), 1 + length(SECTORS)))
   }
 }
 
@@ -755,8 +770,39 @@ T5_SPECS = list(
   list(id = 'table_08', form = '1120s', old = '05',
        years = c(2004, 2006:2007, 2009:2022),
        wrapped_stubs = FALSE, s_stub = TRUE,
-       universe = 'Form 1120S, rental real estate (Form 8825)')
+       universe = 'Form 1120S, rental real estate (Form 8825)'),
+
+  # The three sector-column tables. Unlike everything above they are published
+  # "by SELECTED sectors": there is no not-allocable column, so the sectors do
+  # NOT add to the all-sectors total, and Table 10 -- Form 1120-F, a small
+  # population -- omits sectors outright in the early years (12 of 19 in
+  # TY2000). Both facts are declared by sectors = 'selected', which swaps the
+  # sum check for a comparison against the panels those totals must match.
+  list(id = 'table_10', form = 'ccr', old = '10', old_suffix = 'is',
+       years = 1998:2022, wrapped_stubs = TRUE, s_stub = FALSE,
+       sectors = 'selected',
+       universe = 'Form 1120-F, foreign corporations with U.S. business'),
+  list(id = 'table_11', form = 'ccr', old = '20', old_suffix = 'ti',
+       years = 1998:2022, wrapped_stubs = TRUE, s_stub = FALSE,
+       sectors = 'selected',
+       scopes = 'number of returns with',
+       noise_sections = c('returns with and without net income',
+                          'total income tax after'),
+       universe = 'all active corporations -- dividends and tax items'),
+  list(id = 'table_12', form = 'ccr', old = '26', old_suffix = 'ss',
+       years = 1998:2022, wrapped_stubs = TRUE, s_stub = FALSE,
+       sectors = 'selected',
+       scopes = c('returns with and without net income',
+                  'returns with net income'),
+       universe = 'all active corporations -- cost of goods sold (Form 1125-A)')
 )
+
+# defaults for the fields only some specs set
+for (i in seq_along(T5_SPECS)) {
+  if (is.null(T5_SPECS[[i]]$sectors))        T5_SPECS[[i]]$sectors = 'all'
+  if (is.null(T5_SPECS[[i]]$scopes))         T5_SPECS[[i]]$scopes = character(0)
+  if (is.null(T5_SPECS[[i]]$noise_sections)) T5_SPECS[[i]]$noise_sections = character(0)
+}
 
 #-------------------------------------
 # Where the files live, by vintage
@@ -821,6 +867,11 @@ block_key = function(hdr) {
   # in the stacked label and has to come off before the name is read.
   k = sub('\\s*\\([0-9]+\\)\\s*$', '', strip_continued(hdr))
   k = match_key(gsub('\\btotal\\b', ' ', k))
+  # Tables 10-12 label the whole industry band rather than each block, so
+  # "Sector" or "Selected sectors" stacks onto the first column of the run
+  # ("Sector Agriculture, forestry, fishing, and hunting"). No sector name
+  # begins with either word, so the prefix can simply come off.
+  k = sub('^(selected )?sectors? ', '', k)
   vapply(k, function(one) {
     w = strsplit(one, ' ', fixed = TRUE)[[1]]
     h = length(w) %/% 2
@@ -844,10 +895,11 @@ column_industry = function(col_label) {
   # "Wholesale and retail trade Wholesale trade Total" -- aggregate name and
   # then its own. Only that exact composition counts: matching a bare suffix
   # would hand Retail trade the AGGREGATE's own column, whose key ends in the
-  # same two words.
+  # same two words. It need not carry "Total" as well; TY1998 Table 26 heads
+  # the wholesale column with nothing but the two names.
   for (sector in setdiff(SECTORS, industry)) {
     nested = paste(match_key(AGGREGATES), match_key(sector))
-    hit = which(total & is.na(industry) & bkey %in% nested)
+    hit = which(is.na(industry) & bkey %in% nested)
     if (length(hit) > 0) industry[hit[1]] = sector
   }
 
@@ -876,29 +928,70 @@ column_industry = function(col_label) {
 # Which row is which item
 #-------------------------------------------------
 
-# SOI also breaks a long item name over two stub lines and puts the data on
-# the SECOND, so extract_sheet reads the first line as a section header
-# ("Mortgages, notes, and bonds payable in less" + "than one year"). Whether a
-# section header means a wrap is a property of the published stub, and the two
-# families differ -- both enumerated across every vintage:
-#   * in the 5.x family EVERY section header is a wrap, so the row directly
-#     below one is glued back onto it, which reproduces the published label
-#     and lets ITEM_ALIASES harmonize it like any other;
-#   * the 1120S family produces only two section headers, "Income from trade
-#     or business" and "Total receipts", and both are real GROUPINGS over the
-#     rows beneath them. Gluing there would invent an item ("Income from trade
-#     or business Total receipts") and break its series in two.
+# extract_sheet turns any stub line that carries no data into a `section`, but
+# SOI uses such a line for three different things, and which one it means is a
+# property of the published stub. All three were enumerated across every
+# vintage of every table here:
+#
+#   WRAP    a long item name broken over two lines with the data on the SECOND
+#           ("Mortgages, notes, and bonds payable in less" + "than one year").
+#           The row below is glued back on, reproducing the published label so
+#           ITEM_ALIASES can harmonize it. Every section in the 5.x family is
+#           one of these, as are all six in Table 10.
+#   SCOPE   a heading that qualifies EVERY row beneath it, and has to, because
+#           the rows repeat. Table 12 prints its ten items twice, once under
+#           "Returns with and without net income" and once under "Returns with
+#           net income"; Table 11 prints "Income tax" once as a return count
+#           under "Number of returns with--" and again as an amount. Those
+#           rows take the scope as a prefix.
+#   NOISE   structure that names nothing the panel needs. The 1120S family's
+#           "Income from trade or business" is one; so are Table 11's
+#           "Returns with and without net income" and "Total income tax
+#           after--", which the MODERN Table 11 drops entirely -- prefixing
+#           them would break every one of those series at 2014.
+#
+# spec$scopes and spec$noise_sections list the second and third by name (dashes
+# and "-- continued" trimmed); spec$wrapped_stubs decides what an unlisted
+# section means.
+scope_key = function(section) {
+  match_key(sub('\\s*-+\\s*continued$', '', tolower(section)))
+}
+
 t5_row_items = function(df, spec) {
   rows = unique(df[, c('row_seq', 'section', 'row_label')])
   rows = rows[order(rows$row_seq), ]
-  prev = c(NA_character_, head(rows$section, -1))
-  wrapped = spec$wrapped_stubs &
-    !is.na(rows$section) & (is.na(prev) | rows$section != prev)
-  item = apply_alias(ifelse(wrapped, paste(rows$section, rows$row_label),
-                            rows$row_label))
+  item = apply_alias(rows$row_label)
+  scope = rep(NA_character_, nrow(rows))
+  current = NA_character_
+  previous = NA_character_
+  for (i in seq_len(nrow(rows))) {
+    section = rows$section[i]
+    opens = !is.na(section) && (is.na(previous) || section != previous)
+    if (opens) {
+      key = scope_key(section)
+      if (key %in% spec$scopes) {
+        current = key
+      } else if (key %in% spec$noise_sections) {
+        # names nothing, but it still ENDS the scope above it -- Table 11's
+        # "Number of returns with--" block is closed by "Returns with and
+        # without net income", and letting the scope run on would qualify the
+        # whole rest of the sheet with it
+        current = NA_character_
+      } else if (spec$wrapped_stubs) {
+        # a wrap sits inside whatever block it belongs to and does not end it
+        item[i] = apply_alias(paste(section, rows$row_label[i]))
+      }
+    }
+    scope[i] = current
+    previous = section
+  }
+  scoped = !is.na(scope)
+  item[scoped] = paste0(scope[scoped], ': ', item[scoped])
   # the 1120S stub carries its own renames and its split rows (see
   # alignment_helpers.R); the corporate stub has neither
   if (spec$s_stub) item = qualify_splits(apply_s_alias(item))
+  # last resort: a label that still repeats within the sheet takes its parent
+  item = qualify_duplicates(item)
   rows$item = item
   rows[, c('row_seq', 'item')]
 }
@@ -917,11 +1010,32 @@ t5_extract = function(spec, year) {
   hdr = unique(df[, c('col_seq', 'col_label')])
   hdr = hdr[order(hdr$col_seq), ]
   hdr$industry = column_industry(hdr$col_label)
-  missing = setdiff(c(ALL_INDUSTRIES, SECTORS), hdr$industry)
+  # A "selected sectors" table publishes only some of the 19 in some vintages
+  # -- Table 10 carries 12 in TY2000 -- so only the all-sectors column is
+  # required there. Everywhere else a missing sector means the header search
+  # failed and the run must stop.
+  required = if (spec$sectors == 'selected') ALL_INDUSTRIES else {
+    c(ALL_INDUSTRIES, SECTORS)
+  }
+  missing = setdiff(required, hdr$industry)
   if (length(missing) > 0) {
     stop(sprintf('%s: sector column(s) not found: %s',
                  path, paste(missing, collapse = '; ')))
   }
+  # A paginated sheet repeats its header block, so one column can arrive with
+  # two spellings ("Selected sectors Manufacturing" on the first page,
+  # "Selected sectors--continued Manufacturing" on the next). Collapse to one
+  # row per column; the spellings must agree on what the column is.
+  resolved = tapply(hdr$industry, hdr$col_seq, function(v) {
+    named = unique(v[!is.na(v)])
+    if (length(named) > 1) {
+      stop(sprintf('%s: one column is headed both "%s" and "%s"', path,
+                   named[1], named[2]))
+    }
+    if (length(named) == 0) NA_character_ else named
+  })
+  hdr = data.frame(col_seq = as.integer(names(resolved)),
+                   industry = unname(resolved), stringsAsFactors = FALSE)
   named = hdr[!is.na(hdr$industry), ]
   if (anyDuplicated(named$industry)) {
     dup = named$industry[duplicated(named$industry)][1]
@@ -957,8 +1071,10 @@ for (spec in T5_SPECS) {
     q
   }))
   p = withhold_cells(restore_stripped_signs(p, spec$id), spec$id)
-  report_sums(spec$id, p)
-  check_every_year(spec$id, p, spec$years)
+  # the sum check needs the sectors to partition the total, which the
+  # "selected sectors" tables do not -- they carry no not-allocable column
+  if (spec$sectors == 'all') report_sums(spec$id, p)
+  check_every_year(spec$id, p, spec$years, spec$sectors)
   t5[[spec$id]] = p
 }
 
@@ -973,38 +1089,62 @@ for (spec in T5_SPECS) {
 # overlap tests the sector columns picked above. 5.1 covers all active
 # corporations, which is Table 1's own universe; 5.2 covers returns with net
 # income, which Table 1 carries as its two "with net income" columns.
-T5_VS_T1 = list(
-  table_05_1 = c('number of returns' = 'number of returns',
+# Each entry is a panel, the panel it must agree with, and the items they
+# publish in common (named by the second panel's label). For the three
+# "selected sectors" tables this REPLACES the sum check they cannot support,
+# and it is a much sharper test: Tables 11 and 12 restate quantities Tables 1,
+# 5.1 and 5.2 also carry, so every shared cell has to match to the digit.
+T5_AGREES = list(
+  list(id = 'table_05_1', with = 'table_01',
+       items = c('number of returns' = 'number of returns',
                  'total receipts'    = 'total receipts',
                  'business receipts' = 'business receipts',
                  'cost of goods sold'= 'cost of goods sold',
                  'income subject to tax' = 'income subject to tax',
                  'total income tax before credits' = 'total income tax before credits',
-                 'total income tax after credits'  = 'total income tax after credits'),
-  table_05_2 = c('number of returns' = 'number of returns with net income',
-                 'total receipts' = 'total receipts of returns with net income')
+                 'total income tax after credits'  = 'total income tax after credits')),
+  list(id = 'table_05_2', with = 'table_01',
+       items = c('number of returns' = 'number of returns with net income',
+                 'total receipts' = 'total receipts of returns with net income')),
+  list(id = 'table_11', with = 'table_01',
+       items = c('number of returns' = 'number of returns',
+                 'income subject to tax' = 'income subject to tax',
+                 'total income tax before credits' = 'total income tax before credits',
+                 'total income tax after credits'  = 'total income tax after credits')),
+  list(id = 'table_12', with = 'table_05_1',
+       items = c('returns with and without net income: number of returns' =
+                   'number of returns',
+                 'returns with and without net income: cost of goods sold' =
+                   'cost of goods sold')),
+  list(id = 'table_12', with = 'table_05_2',
+       items = c('returns with net income: cost of goods sold' =
+                   'cost of goods sold'))
 )
-for (id in names(T5_VS_T1)) {
-  map = T5_VS_T1[[id]]
-  p = t5[[id]]
+panels_by_id = c(list(table_01 = panel), t5)
+for (spec in T5_AGREES) {
+  map = spec$items
+  p = panels_by_id[[spec$id]]
+  q = panels_by_id[[spec$with]]
   overlap = merge(
     transform(p[p$item %in% names(map), ],
-              item = unname(map[item]), t5 = value)[
-                , c('tax_year', 'industry', 'item', 't5')],
-    transform(panel, t1 = value)[, c('tax_year', 'industry', 'item', 't1')],
+              item = unname(map[item]), a = value)[
+                , c('tax_year', 'industry', 'item', 'a')],
+    transform(q, b = value)[, c('tax_year', 'industry', 'item', 'b')],
     by = c('tax_year', 'industry', 'item'))
-  ok = !is.na(overlap$t5) & !is.na(overlap$t1) & overlap$t1 != 0
-  overlap$rel = abs(overlap$t5 - overlap$t1) / abs(overlap$t1)
+  ok = !is.na(overlap$a) & !is.na(overlap$b) & overlap$b != 0
+  overlap$rel = abs(overlap$a - overlap$b) / abs(overlap$b)
   worst = overlap[ok, ][order(-overlap$rel[ok]), ][1, ]
   if (worst$rel > 1e-3) {
-    stop(sprintf('%s disagrees with table_01: %d %s %s -- %.0f vs %.0f (%.2f%%)',
-                 id, worst$tax_year, worst$industry, worst$item, worst$t5,
-                 worst$t1, 100 * worst$rel))
+    stop(sprintf('%s disagrees with %s: %d %s %s -- %.0f vs %.0f (%.2f%%)',
+                 spec$id, spec$with, worst$tax_year, worst$industry,
+                 worst$item, worst$a, worst$b, 100 * worst$rel))
   }
-  message(sprintf('%s vs table_01: %d shared cells agree, worst relative gap %.2e (%d %s %s)',
-                  id, sum(ok), worst$rel, worst$tax_year, worst$industry,
-                  worst$item))
+  message(sprintf('%s vs %s: %d shared cells agree, worst relative gap %.2e (%d %s %s)',
+                  spec$id, spec$with, sum(ok), worst$rel, worst$tax_year,
+                  worst$industry, worst$item))
 }
+
+
 
 # Two 1120S tables classify the SAME universe -- Table 7 its income, Table 6.1
 # its balance sheet -- from the same sample, so where they publish the same
@@ -1049,6 +1189,20 @@ for (pair in T5_NESTED) {
   message(sprintf('%s nests inside %s: %d industry-years, all counts within',
                   pair[1], pair[2], sum(!is.na(n_sub) & !is.na(n_sup))))
 }
+
+# Table 10 counts Form 1120-F filers, a universe no other panel restates, so
+# the only check available is that they are a subset: a sector can never hold
+# more 1120-F returns than it holds returns altogether.
+n_1120f = by_cell(t5$table_10, 'number of returns')
+n_all = by_cell(panel, 'number of returns')[names(n_1120f)]
+ok = !is.na(n_1120f) & !is.na(n_all)
+if (any(n_1120f[ok] > n_all[ok])) {
+  i = which(ok)[which(n_1120f[ok] > n_all[ok])[1]]
+  stop(sprintf('table_10 has more 1120-F returns than table_01 has returns: %s, %.0f vs %.0f',
+               names(n_1120f)[i], n_1120f[i], n_all[i]))
+}
+message(sprintf('table_10 nests inside table_01: %d industry-years, all counts within',
+                sum(ok)))
 
 # The S corporations are part of what Table 5.3 leaves out of Table 5.1, so
 # their return count cannot exceed the difference (which also carries the
