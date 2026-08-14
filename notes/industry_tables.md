@@ -545,7 +545,101 @@ these three label the whole industry band rather than each block, and step (2)
 of the column search no longer insists on the word "Total" — TY1998 Table 26
 heads its wholesale column with nothing but the aggregate name and its own.
 
+## `aligned/table_05_1_minor.csv` — below sector level, 2014–2022
+
+Every panel above stops at the 19 sectors. This one goes below them:
+**115,910 cells, 189 canonical minor industries × 70 items × 9 years**, with
+`tax_year, sector, minor, item, value, unit, series_break`. The mapping that
+produces it is written out separately as
+`aligned/industry_concordance.csv` (1,707 rows — every published label in
+every year, with the canonical name it resolves to and whether it was
+renamed), so the concordance can be read without reading code.
+
+### Why it stops at 2014, and why that is not a labelling problem
+
+Two things separate the eras, and only one of them a concordance can fix.
+
+**Granularity.** The archive tables are published *by Major Industry* and the
+modern ones *by Minor Industry* — 72 industries against 190. It is not a
+rename:
+
+| Sector | 1998–2013 | 2014–2022 |
+|---|---|---|
+| Mining | **0** | 5 |
+| Utilities | **0** | 4 |
+| Professional, scientific, technical | **0** | 9 |
+| Management of companies | **0** | 2 |
+| Manufacturing | 21 | 65 |
+| Wholesale trade | 3 | 18 |
+| Information | 6 | 11 |
+
+Four sectors have no minors at all before 2014. The modern set is a finer
+partition of the old one, so the two eras can only meet at the *old*
+granularity — which discards most of what the modern tables publish. That is a
+real deliverable, but a different one, and it is not this panel.
+
+**Revisions.** NAICS was revised in 2002, 2007, 2012 and 2022 (2017 left these
+tables alone). Within 2014–2022 that is one revision to bridge, and TY2014–2021
+publish an identical block of 190 apart from TY2018 tagging two insurance
+lines with their form number.
+
+### What the TY2022 revision did, and what could be bridged
+
+A year-on-year link report matches each sector's block against the next year's
+by label similarity. For TY2021 → TY2022 it found five sectors changed:
+
+- **Manufacturing, wholesale trade, information** — pure renames, including
+  two typos of SOI's own ("boradcasting and content providers", "sounds
+  recording industries") and a reordering of the Information block that moved
+  motion picture and sound recording to the front. All 1:1, all bridged.
+- **Retail trade** — "stores" became "retailers" throughout, which is a
+  rename; but NAICS 2022 also **eliminated nonstore retailers (454)** and
+  redistributed its establishments — e-commerce above all — to the merchandise
+  line each one sells in, and folded other miscellaneous store retailers into
+  the new miscellaneous group. **No concordance can bridge that**, and no
+  aggregation short of the whole sector recovers comparability. The two
+  eliminated lines end at 2021, and every cell of the sector carries a
+  `series_break` note so the discontinuity travels with the data.
+- **Finance and insurance** — mostly renames, plus one clean merge: NAICS 2022
+  folded securities brokerage into investment banking, so the two earlier
+  columns are **summed** into the one canonical industry. Its return count
+  runs 10,480 (2014) → 7,196 (2021) → 6,537 (2022) with no step at the merge.
+
+Result: **187 of 189 canonical minors span all nine years**, and the two that
+do not are exactly the two the revision eliminated.
+
+### What verifies it
+
+The minors of a sector must add to that sector's own column, which the
+verified sector panel already carries — **8,180 year × sector × item
+combinations, worst relative gap 1.34e-05** (TY2020 manufacturing return
+counts, the usual fractional-count rounding). It is a real check: it catches a
+column binned into the wrong sector, a canonical name that merged two
+industries it should not have, and a minor silently dropped, any of which
+moves the sum by percent rather than by rounding.
+
+It also found a published defect of its own. TY2014 prints the two
+Accommodation and food services minors of "Net loss, noncapital assets" as
+−192,705 and −613,099, on an item that is a deduction published as a
+magnitude, with its own sector column positive at 805,803 — and 192,705 +
+613,099 is 805,804. The magnitudes are right and only the sign is wrong, so it
+is repaired and asserted like the other vintage defects.
+
+### The archive era, and what it would take
+
+Not attempted here, but surveyed. The same link report over 1998–2013 finds
+**11 renames** and restructurings concentrated almost entirely in
+**Information** — 4 minors in 1998, 7 in 2002, 6 from 2007 — plus Construction
+relabelled at 2002 (NAICS 2002) and Wholesale trade gaining electronic markets
+and agents and brokers. That is a tractable curation of roughly the same size
+as the modern one. Bridging it to the modern era afterwards is the expensive
+part: it needs each of the 190 modern minors assigned to one of the ~72 old
+majors, which is NAICS knowledge rather than label matching, and it can only
+ever produce a panel at the coarser granularity.
+
 ## Next increments
 
-- **Minor-industry concordance**, the one remaining blocker on all of these.
-  Every basic table with an industry dimension is now aligned at sector level.
+- **The archive-era (1998–2013) major-industry concordance**, then the rollup
+  that bridges it to the modern minors. Both are described above.
+- Every basic table with an industry dimension is aligned at sector level, and
+  Table 5.1 is aligned below it for the modern era.

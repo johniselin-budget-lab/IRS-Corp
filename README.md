@@ -5,8 +5,9 @@ Report (Publication 16)** basic tables, plus aligned cross-year panels:
 1994–2022 for Tables 4, 2.1, 2.2, and 3.1, 1998–2022 for Tables 1 (with its
 coefficients of variation) and 5.1–5.4 at NAICS sector level, 2004/2006–2022
 for the whole Form 1120S set (6.1, 6.2, 7, 8 by industry; 3.2 and 9 by class),
-1998–2022 for the sector-column Tables 10, 11 and 12, and 2014–2022 generic
-panels for every basic table (see `aligned/` below):
+1998–2022 for the sector-column Tables 10, 11 and 12, Table 5.1 again at
+**minor-industry** level for 2014–2022, and 2014–2022 generic panels for every
+basic table (see `aligned/` below):
 
 - 2014+ (xlsx per table):
   https://www.irs.gov/statistics/soi-tax-stats-corporation-income-tax-returns-complete-report-publication-16
@@ -91,6 +92,10 @@ aligned/            table_4.csv      harmonized Table 4 panel, 1994-2022
                                      of goods sold (old 26). All thirteen
                                      share one schema and join on
                                      (tax_year, industry)
+    table_05_1_minor.csv             Table 5.1 BELOW sector level: 189 minor
+                                     industries x 70 items, 2014-2022
+    industry_concordance.csv         published minor-industry label -> canonical
+                                     name, per year (what builds the panel above)
     modern/         {table_id}.csv   every basic table 2014-2022, generic
                                      long format keyed on published labels,
                                      with industry-hierarchy columns

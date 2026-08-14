@@ -30,6 +30,7 @@ page][archive] · [SOI's 2014 table-number crosswalk][xwalk] (mirrored at
 | `aligned/table_07.csv`, `table_08.csv` | 2004–2022 | Form 1120S income and rental real estate ← old 1120S 1, 5 |
 | `aligned/table_03_2.csv`, `table_09.csv` | 2004–2022 | Form 1120S by receipt size and by shareholder count ← old 1120S 4, 6 |
 | `aligned/table_1{0,1,2}.csv` | 1998–2022 | sector-column tables ← old 10 (1120-F), 20 (dividends/tax), 26 (COGS) |
+| `aligned/table_05_1_minor.csv` + `industry_concordance.csv` | 2014–2022 | Table 5.1 BELOW sector level: 189 minor industries ([industry_tables.md](industry_tables.md)) |
 
 Everything alignable by pure text-label matching is done, and the industry
 tables are aligned at sector level in both orientations — rows (Table 1) and
@@ -60,9 +61,15 @@ Two levels of ambition:
    drops indentation entirely from 2017); exclude the 1998–99 supersectors and
    "Wholesale and retail trade" or the detail double counts; and use the
    sector-sum-vs-total check as the guard on every such choice.
-2. **Minor-industry level** — needs a curated per-revision concordance
-   (renames bridgeable; splits only by aggregating). Only worth it if a
-   downstream use needs sub-sector detail.
+2. **Minor-industry level** — **done for 2014–2022** (`table_05_1_minor.csv`,
+   189 minors, 187 of them spanning all nine years). The TY2022 NAICS revision
+   is bridged except where it ELIMINATED nonstore retailers and redistributed
+   it, which nothing can bridge; retail trade carries a `series_break` note.
+   What remains is the archive era at its own (coarser, *major*-industry)
+   granularity, and the rollup joining the two — see
+   [industry_tables.md](industry_tables.md). The eras differ in granularity,
+   not just labels: 72 majors against 190 minors, with Mining, Utilities,
+   Professional services and Management publishing NO minors before 2014.
 
 Engine prerequisite (shared by everything below) — **done 2026-08**:
 `extract_sheet` handles stacked/repeated panels (1996 Table 1's rows-below
@@ -216,8 +223,10 @@ Notes from the survey:
    qualifier and paginated-header collapse that every panel now inherits.
    With these, **every basic table with an industry dimension is aligned at
    sector level.**
-7. **Minor-industry concordance** only when a downstream consumer actually
-   needs sub-sector detail. This is now the only thing left in Tier 1.
+7. ~~**Minor-industry concordance**~~ — **done for the modern era 2026-08**
+   (`table_05_1_minor.csv`, `industry_concordance.csv`). What is left is the
+   archive era at major-industry granularity and the rollup between the two;
+   the survey behind both is in [industry_tables.md](industry_tables.md).
 8. **Partnership repo** (proposal above) can start any time — the
    downloader + entity-type and asset-size panels don't depend on the
    corporate tiers; its industry tables should wait for whatever NAICS

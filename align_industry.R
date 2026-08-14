@@ -34,6 +34,11 @@
 #   the same code over a different file map, join cell for cell on
 #   (tax_year, industry, item) so a CV sits beside its estimate.
 #
+#   Below sector level, for the modern era only:
+#   aligned/table_05_1_minor.csv   189 minor industries              2014-2022
+#     tax_year, sector, minor, item, value, unit, series_break
+#   aligned/industry_concordance.csv  the mapping that produces it
+#
 # Table 1 carries the industries in its ROWS and a short list of headline
 # items in its columns; the 5.x and 1120S families transpose that -- the item
 # stub in the rows, industries across the columns -- so the two halves of this
@@ -1225,3 +1230,276 @@ message(sprintf('table_06_1 fits inside table_05_1 less table_05_3: %d industry-
                 sum(ok), max(0, max(s_returns[ok] - gap_returns[ok]))))
 
 for (spec in T5_SPECS) write_panel(spec$id, t5[[spec$id]])
+
+#=============================================================================
+# Minor industries -- the concordance below sector level
+#=============================================================================
+
+# The sector panels above stop at the 19 NAICS sectors because the ~190 minor
+# industries beneath them are not comparable across the whole span. Two things
+# stand in the way, and only one of them is a labelling problem:
+#
+#   * GRANULARITY. The archive tables are published "by Major Industry" and
+#     the modern ones "by Minor Industry" -- 72 industries against 190. It is
+#     not a rename: Mining and Utilities have NO minors at all before 2014,
+#     Manufacturing has 21 against 65, Wholesale trade 3 against 18. The
+#     modern set is a finer partition of the old one, so the two eras can only
+#     meet at the OLD granularity, which throws away most of what the modern
+#     tables publish.
+#   * REVISIONS. NAICS was revised in 2002, 2007, 2012 and 2022 (the 2017
+#     revision left these tables alone). Most of what a revision does here is
+#     rename, which a concordance bridges. Some of it is not.
+#
+# So this section aligns the MODERN era, 2014-2022, where the granularity is
+# constant and one revision has to be bridged. The archive era and the bridge
+# between the two are written up in notes/industry_tables.md with what the
+# year-on-year link report found; neither is attempted here.
+
+MINOR_YEARS = 2014:2022
+
+# Published leaf -> canonical minor. Curated from a year-on-year link report
+# that matches each sector's block against the next year's by label
+# similarity; every entry below is a pair that report surfaced. The canonical
+# form is the LATEST published one, as everywhere else in this repo.
+#
+# TY2014-2021 publish one identical block of 190, apart from TY2018 tagging
+# two insurance lines with their form number. Everything else here is the
+# NAICS 2022 revision, which SOI applied in TY2022: "stores" became
+# "retailers" across retail trade, Information was reordered and relabelled
+# (with two typos of SOI's own, "boradcasting" and "sounds recording"), and
+# several finance lines were renamed or merged.
+MINOR_ALIASES = c(
+  # TY2018 only
+  'life insurance form 1120 l'                 = 'life insurance form 1120l',
+  'property and casualty insurance form 1120 pc' =
+    'property and casualty insurance form 1120pc',
+  'life insurance'                             = 'life insurance form 1120l',
+  'property and casualty insurance'            = 'property and casualty insurance form 1120pc',
+  # manufacturing
+  'other food'                                 = 'other food including coffee tea flavorings and seasonings',
+  'apparel accessories and other apparel'      = 'apparel accessories and other apparel mfg',
+  # wholesale trade
+  'wholesale electronic markets and agents and brokers' = 'wholesale trade agents and brokers',
+  # retail trade -- the "stores" to "retailers" relabelling
+  'home centers paint and wallpaper stores'    = 'home centers paint and wallpaper retailers',
+  'hardware stores'                            = 'hardware retailers',
+  'lawn and garden equipment and supplies stores' =
+    'lawn and garden equipment and supplies retailers',
+  'food and beverage stores'                   = 'food and beverage retailers',
+  'beer wine and liquor stores'                = 'beer wine and liquor retailers',
+  'furniture and home furnishings stores'      = 'furniture and home furnishings retailers',
+  'health and personal care stores'            = 'health and personal care retailers',
+  'clothing and clothing accessories stores'   = 'clothing and clothing accessories retailers',
+  'general merchandise stores'                 = 'general merchandise retailers',
+  'gasoline stations'                          = 'gasoline stations and fuel dealers',
+  'electronics and appliance stores'           = 'electronics and appliance retailers including computers',
+  'sporting goods hobby book and music stores' =
+    'sporting goods hobby book music and miscellaneous retailers',
+  # information
+  'sound recording industries'                 = 'sounds recording industries',
+  'broadcasting except internet'               = 'boradcasting and content providers',
+  'telecommunications paging cellular cable satellite and internet service providers' =
+    paste('telecommunications including wired wireless satellite cable and other',
+          'program distribution resellers agents other telecommunications and',
+          'internet service providers'),
+  'data processing hosting and related services' =
+    'computing infrastructure providers data processing web hosting and related services',
+  'other information services'                 = 'web search portals libraries archives and other info services',
+  # finance and insurance
+  'savings institutions credit unions and other depository credit intermediation' =
+    'savings institutions and other depository credit intermediation',
+  'activities related to credit intermediation loan brokers check clearing etc' =
+    'activities related to credit intermediation including loan brokers check clearing and money transmitting',
+  'commodity contracts dealing and brokerage'  = 'commodity contracts intermediation',
+  'other insurance related activities third party administrator of insurance etc' =
+    'other insurance related activities including third party administrator of insurance and pension funds',
+  'other financial vehicles including mortgage reits' =
+    'other financial vehicles mortgage real estate investment trust reits',
+  # NAICS 2022 merged securities brokerage into investment banking, so the two
+  # earlier columns are SUMMED into the one canonical industry
+  'investment banking and securities dealing'  = 'investment banking and securities intermediation',
+  'securities brokerage'                       = 'investment banking and securities intermediation'
+)
+
+# Where a revision redistributed an industry rather than renaming or merging
+# it, no concordance can bridge the break and pretending otherwise would be
+# worse than saying so. NAICS 2022 ELIMINATED nonstore retailers (454) and
+# reassigned its establishments -- e-commerce above all -- to the merchandise
+# line each one sells in, and folded other miscellaneous store retailers into
+# the new miscellaneous group. Retail trade's minors therefore do not chain
+# across 2021/2022; its sector total does. The panel keeps both regimes under
+# their published names and flags every cell of the sector so the break cannot
+# be missed.
+MINOR_BREAKS = list(
+  list(sector = 'retail trade', from = 2022,
+       why = 'NAICS 2022 eliminated nonstore retailers and redistributed it')
+)
+
+# TY2014 Table 5.1 prints the two Accommodation and food services minors of
+# "Net loss, noncapital assets" with a minus sign the item cannot carry: it is
+# a deduction, published as a magnitude, and its own sector column is positive
+# at 805,803. The two cells read -192,705 and -613,099, and 192,705 + 613,099
+# is 805,804 -- one unit of rounding -- so the magnitudes are right and only
+# the sign is wrong. The sector panels are unaffected; this is the one such
+# cell pair in the modern span, and the minor sum check is what found it.
+MINOR_SPURIOUS_SIGN = list(
+  list(year = 2014, sector = 'accommodation and food services',
+       item = 'net loss, noncapital assets',
+       minors = c('accommodation', 'food services and drinking places'))
+)
+
+repair_minor_signs = function(p) {
+  for (fix in MINOR_SPURIOUS_SIGN) {
+    hit = p$tax_year == fix$year & p$sector == fix$sector &
+      p$item == fix$item & p$minor %in% fix$minors
+    if (sum(hit) != length(fix$minors)) {
+      stop(sprintf('minor sign repair: expected %d cells of "%s" in %d, found %d',
+                   length(fix$minors), fix$item, fix$year, sum(hit)))
+    }
+    if (any(p$value[hit] >= 0, na.rm = TRUE)) {
+      stop(sprintf('minor sign repair: "%s" in %d is not published negative',
+                   fix$item, fix$year))
+    }
+    p$value[hit] = -p$value[hit]
+    message(sprintf('  TY%d: dropped a spurious minus from %d %s cells',
+                    fix$year, sum(hit), fix$item))
+  }
+  p
+}
+
+minor_canonical = function(leaf) {
+  hit = leaf %in% names(MINOR_ALIASES)
+  leaf[hit] = unname(MINOR_ALIASES[leaf[hit]])
+  leaf
+}
+
+# One vintage of one table at minor level: every column that is NOT a sector
+# total, tagged with the sector whose block it sits in.
+t5_minors = function(spec, year) {
+  path = file.path(dest, t5_file(spec, year))
+  df = extract_sheet(path, script_dir)
+  hdr = unique(df[, c('col_seq', 'col_label')])
+  hdr = hdr[order(hdr$col_seq), ]
+  hdr$industry = column_industry(hdr$col_label)
+  hdr$leaf = block_key(hdr$col_label)
+
+  # a column belongs to the sector whose total most recently opened; an
+  # all-industries or residual column closes the block, and so does the
+  # wholesale-and-retail aggregate, which sits between two sectors
+  sector = rep(NA_character_, nrow(hdr))
+  current = NA_character_
+  for (i in seq_len(nrow(hdr))) {
+    if (!is.na(hdr$industry[i])) {
+      current = if (hdr$industry[i] %in% SECTORS) hdr$industry[i] else NA_character_
+    } else if (hdr$leaf[i] == match_key(AGGREGATES)) {
+      current = NA_character_
+    }
+    sector[i] = current
+  }
+  hdr$sector = sector
+  minors = hdr[is.na(hdr$industry) & !is.na(hdr$sector), ]
+  minors$minor = minor_canonical(minors$leaf)
+
+  keep = df[df$col_seq %in% minors$col_seq, ]
+  keep$sector = minors$sector[match(keep$col_seq, minors$col_seq)]
+  keep$minor  = minors$minor[match(keep$col_seq, minors$col_seq)]
+  items = t5_row_items(df, spec)
+  keep$item = items$item[match(keep$row_seq, items$row_seq)]
+
+  # two published columns can map to one canonical industry (NAICS 2022 merged
+  # securities brokerage into investment banking), so values are SUMMED -- and
+  # a suppressed component makes the sum undefined rather than smaller
+  agg = aggregate(list(value = keep$value),
+                  by = keep[, c('sector', 'minor', 'item')],
+                  FUN = function(v, ...) if (anyNA(v)) NA_real_ else sum(v))
+  agg$unit = ifelse(grepl('^number of', agg$item), 'count', 'thousand_usd')
+  data.frame(tax_year = year, agg[, c('sector', 'minor', 'item', 'value', 'unit')],
+             row.names = NULL, stringsAsFactors = FALSE)
+}
+
+#---------------------------------------------
+# Build, verify against the sectors, and write
+#---------------------------------------------
+
+message('table_05_1_minor (minor industries, 2014-2022)')
+minor = do.call(rbind, lapply(MINOR_YEARS, function(year) {
+  p = t5_minors(T5_SPECS[[1]], year)
+  message(sprintf('  %d: %3d minors x %2d items = %5d cells',
+                  year, length(unique(p$minor)), length(unique(p$item)), nrow(p)))
+  p
+}))
+minor = repair_minor_signs(minor)
+
+# THE check on the concordance: the minors of a sector must add to that
+# sector's own column, which the verified sector panel already carries. It
+# catches a column binned into the wrong sector, a canonical name that merged
+# two industries it should not have, and a minor silently dropped -- any of
+# which moves the sum by percent, not by rounding.
+sector_value = with(t5$table_05_1[t5$table_05_1$row_type == 'sector', ],
+                    setNames(value, paste(tax_year, industry, item)))
+roll = aggregate(list(value = minor$value),
+                 by = minor[, c('tax_year', 'sector', 'item')],
+                 FUN = function(v, ...) if (anyNA(v)) NA_real_ else sum(v))
+roll$sector_total = sector_value[with(roll, paste(tax_year, sector, item))]
+ok = !is.na(roll$value) & !is.na(roll$sector_total) & roll$sector_total != 0
+roll$rel = abs(roll$value - roll$sector_total) / abs(roll$sector_total)
+roll$abs = abs(roll$value - roll$sector_total)
+bad = roll[ok & roll$rel > 1e-4 & roll$abs > 2, ]
+if (nrow(bad) > 0) {
+  bad = bad[order(-bad$rel), ]
+  stop(sprintf('minor industries do not add to their sector:\n%s',
+               paste(sprintf('  %d %s %s (%.3f%%)', bad$tax_year, bad$sector,
+                             bad$item, 100 * bad$rel), collapse = '\n')))
+}
+material = roll[ok & roll$abs > 2, ]
+message(sprintf('minor sum check: %d year x sector x item combinations, %s',
+                sum(ok),
+                if (nrow(material) == 0) 'every gap within the rounding floor' else
+                  sprintf('worst relative gap %.2e (%d %s %s)',
+                          max(material$rel), material$tax_year[which.max(material$rel)],
+                          material$sector[which.max(material$rel)],
+                          material$item[which.max(material$rel)])))
+
+# Mark the sectors whose minor series a revision broke, so the discontinuity
+# travels with the data rather than living only in the notes.
+minor$series_break = NA_character_
+for (b in MINOR_BREAKS) {
+  hit = minor$sector == b$sector
+  minor$series_break[hit] = sprintf('minors do not chain across %d/%d: %s',
+                                    b$from - 1, b$from, b$why)
+  message(sprintf('  %s: %d cells flagged -- %s', b$sector, sum(hit), b$why))
+}
+
+n_stable = sum(table(unique(minor[, c('tax_year', 'minor')])$minor) ==
+                 length(MINOR_YEARS))
+message(sprintf('%d canonical minors, %d of them in all %d years',
+                length(unique(minor$minor)), n_stable, length(MINOR_YEARS)))
+
+out_path = file.path(dest, 'aligned', 'table_05_1_minor.csv')
+write.csv(minor[order(minor$tax_year, minor$sector, minor$minor, minor$item), ],
+          out_path, row.names = FALSE, na = '')
+message(sprintf('table_05_1_minor: wrote %s (%d rows)', out_path, nrow(minor)))
+
+# The concordance itself, so the mapping is inspectable without reading code
+concordance = do.call(rbind, lapply(MINOR_YEARS, function(year) {
+  path = file.path(dest, t5_file(T5_SPECS[[1]], year))
+  df = extract_sheet(path, script_dir)
+  hdr = unique(df[, c('col_seq', 'col_label')]); hdr = hdr[order(hdr$col_seq), ]
+  hdr$industry = column_industry(hdr$col_label); hdr$leaf = block_key(hdr$col_label)
+  current = NA_character_; sec = rep(NA_character_, nrow(hdr))
+  for (i in seq_len(nrow(hdr))) {
+    if (!is.na(hdr$industry[i])) {
+      current = if (hdr$industry[i] %in% SECTORS) hdr$industry[i] else NA_character_
+    } else if (hdr$leaf[i] == match_key(AGGREGATES)) current = NA_character_
+    sec[i] = current
+  }
+  keep = !is.na(sec) & is.na(hdr$industry)
+  data.frame(tax_year = year, sector = sec[keep], published = hdr$leaf[keep],
+             canonical = minor_canonical(hdr$leaf[keep]),
+             row.names = NULL, stringsAsFactors = FALSE)
+}))
+concordance$renamed = concordance$published != concordance$canonical
+conc_path = file.path(dest, 'aligned', 'industry_concordance.csv')
+write.csv(concordance, conc_path, row.names = FALSE, na = '')
+message(sprintf('industry_concordance: wrote %s (%d rows, %d renamed)',
+                conc_path, nrow(concordance), sum(concordance$renamed)))
